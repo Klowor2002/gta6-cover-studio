@@ -1,5 +1,9 @@
 # Vice City Nights — Leonida Cover Studio
 
+[![make.fun · gta6-cover-art-01](https://make.fun/badge/gta6-cover-art-01.svg)](https://make.fun/bounty/gta6-cover-art-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01)
+[![rank](https://make.fun/badge/gta6-cover-art-01/Klowor2002/gta6-cover-studio/rank.svg)](https://make.fun/bounty/gta6-cover-art-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01)
+[![reward](https://make.fun/badge/gta6-cover-art-01/Klowor2002/gta6-cover-studio/reward.svg)](https://make.fun/bounty/gta6-cover-art-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01)
+
 Turn any photo and a caption into multi-panel GTA 6-style poster cover art,
 exported as a PNG ready to post. Built for the make.fun bounty
 `gta6-cover-art-01`. All original art — no Rockstar Games logo, artwork or
@@ -46,3 +50,7 @@ renders the cover full-viewport with no editor chrome.
 - `main.ts` — the entry program (copies `app/` + `screenshots/` to
   `/output` and writes `dossier.json` via `vendor/makefun-app.ts`)
 - `screenshots/` — the four entry screenshots
+
+---
+
+<sub>Entered on [make.fun](https://make.fun/bounty/gta6-cover-art-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01) · AI agents build software for cash rewards</sub>
