@@ -3,21 +3,83 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cover Snap</title>
-<link rel="stylesheet" href="./style.css">
+<title>Vice City Nights — Leonida Cover Studio</title>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-<main class="app">
-  <section class="controls">
-    <h1>Cover Snap</h1>
-    <p>A photo and a caption, made into a square cover.</p>
-    <label>Photo <input id="photo" type="file" accept="image/*"></label>
-    <label>Caption <input id="caption" type="text" maxlength="40" value="Sunset Heist"></label>
-    <button id="export" type="button">Export PNG 1080 x 1080</button>
-    <p id="status" role="status"></p>
+<header class="top">
+  <div>
+    <h1>VICE CITY NIGHTS</h1>
+    <p class="tag">Leonida Cover Studio — turn your photo into GTA-style poster cover art</p>
+  </div>
+  <div class="presets" role="group" aria-label="Style preset">
+    <button id="presetSunset" class="preset active" type="button">Vice Sunset</button>
+    <button id="presetNeon" class="preset" type="button">Neon Nights</button>
+  </div>
+</header>
+
+<main class="layout">
+  <section class="preview">
+    <canvas id="coverCanvas" width="960" height="540" aria-label="Cover preview"></canvas>
+    <p class="hint">Click a panel to select it, then drag it to pan. One photo can fill every panel.</p>
+    <p id="statusLine" class="status" role="status">Load a photo to begin — or try a sample.</p>
   </section>
-  <canvas id="cover" width="1080" height="1080" aria-label="The cover"></canvas>
+
+  <aside class="controls">
+    <section class="panel-box">
+      <h2>1 · Your photos</h2>
+      <label class="upload" for="fileInput">Upload 1–3 photos</label>
+      <input id="fileInput" type="file" accept="image/*" multiple>
+      <div class="samples">
+        <button id="sampleBoulevard" type="button">Try sample: Boulevard</button>
+        <button id="samplePier" type="button">Try sample: Pier</button>
+      </div>
+      <p class="fine">Photos are read on your machine only. Nothing is uploaded.</p>
+    </section>
+
+    <section class="panel-box">
+      <h2>2 · Crop the selected panel</h2>
+      <p id="panelLabel" class="panel-label">Selected: Hero panel</p>
+      <label for="zoomRange">Zoom <span id="zoomValue">1.0×</span></label>
+      <input id="zoomRange" type="range" min="1" max="3" step="0.05" value="1">
+      <div class="row">
+        <button id="fillAll" type="button">Fill all panels</button>
+        <button id="resetPan" type="button">Reset pan</button>
+      </div>
+      <div class="row">
+        <button id="usePhoto0" type="button">Photo 1 here</button>
+        <button id="usePhoto1" type="button">Photo 2 here</button>
+        <button id="usePhoto2" type="button">Photo 3 here</button>
+      </div>
+    </section>
+
+    <section class="panel-box">
+      <h2>3 · Caption</h2>
+      <label for="captionInput">Caption</label>
+      <input id="captionInput" type="text" value="VICE CITY NIGHTS" maxlength="40">
+      <label for="subtitleInput">Subtitle</label>
+      <input id="subtitleInput" type="text" value="LEONIDA • EST. 2026" maxlength="48">
+      <label for="captionSize">Caption size <span id="captionSizeValue">100%</span></label>
+      <input id="captionSize" type="range" min="60" max="160" step="5" value="100">
+    </section>
+
+    <section class="panel-box export-box">
+      <h2>4 · Export PNG</h2>
+      <div class="row">
+        <button id="export1080" type="button">1080 × 1080</button>
+        <button id="export1350" type="button">1080 × 1350</button>
+        <button id="export1920" type="button">1920 × 1080</button>
+      </div>
+      <p class="fine">One click, exact size, ready to post.</p>
+    </section>
+  </aside>
 </main>
-<script type="module" src="./src/main.js"></script>
+
+<footer class="foot">
+  <p>Original art only — no Rockstar Games logo, artwork or fonts. Caption lettering:
+  Anton, licensed under the SIL Open Font License (see app/fonts/OFL.txt).</p>
+</footer>
+
+<script type="module" src="src/app.js"></script>
 </body>
 </html>
