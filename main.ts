@@ -1,44 +1,46 @@
-// Vice City Nights — Leonida Cover Studio, gta6-cover-art-01 entry (Node 22,
-// standard library only). The program hands the entry in: it copies this
-// repository's app/ (the offline cover maker) and screenshots/ (the four
-// screenshots the maker took) beside this file into /output, then writes
-// /output/dossier.json with the vendored make.fun library, which is the
-// summary the judge reads. Outside the grader's container,
-// MAKEFUN_OUTPUT_DIR stands in for /output:
-//   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
+// Vice City Nights — Leonida Cover Studio: entry program.
+//
+// Stages the static app and the screenshots into the output directory,
+// then writes the make.fun dossier that describes exactly what was
+// staged. The staging dir is rebuilt from scratch on every run so two
+// consecutive runs produce byte-identical output.
 
-import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { buildDossier } from './vendor/makefun-app.ts';
+import { cpSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { buildDossier } from "./vendor/makefun-app.ts";
 
-const here = fileURLToPath(new URL('.', import.meta.url));
-const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+const here = dirname(fileURLToPath(import.meta.url));
+const outDir = process.env.MAKEFUN_OUTPUT_DIR ?? "/output";
 
-// Fail loudly, before writing anything, if the app entry point is missing:
-// a dossier built from a broken app would only fail later at the gate.
-if (!existsSync(join(here, 'app', 'index.html'))) {
-  throw new Error('app/index.html is missing — the cover maker was not built');
+// Empty staging dir first: no stale file can leak into the dossier.
+rmSync(outDir, { recursive: true, force: true });
+mkdirSync(outDir, { recursive: true });
+
+for (const name of ["app", "screenshots"]) {
+  cpSync(join(here, name), join(outDir, name), { recursive: true });
 }
 
-mkdirSync(out, { recursive: true });
-cpSync(join(here, 'app'), join(out, 'app'), { recursive: true });
-mkdirSync(join(out, 'screenshots'), { recursive: true });
-if (existsSync(join(here, 'screenshots'))) {
-  cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
-}
+// The gate's caps, mirrored so this program refuses exactly where the
+// scorer would: the text budget shapes the dossier bytes, the rest refuse.
+const caps = {
+  text_max_bytes: 163840,
+  screenshots: { max: 4, max_bytes: 262144 },
+  app_max_files: 993,
+  app_max_bytes: 50331648,
+  app_path_max_bytes: 1000,
+};
 
-// The scorer's own caps (reference/gate.json): text_max_bytes shapes the
-// dossier text; the other caps refuse an entry the scorer would refuse
-// (more than 4 screenshots or one over 256 KiB; more than 993 files in app/
-// or 48 MiB of app files in all, or a path under app/ over 1000 bytes).
-writeFileSync(
-  join(out, 'dossier.json'),
-  buildDossier(out, {
-    text_max_bytes: 163840,
-    screenshots: { max: 4, max_bytes: 262144 },
-    app_max_files: 993,
-    app_max_bytes: 50331648,
-    app_path_max_bytes: 1000,
-  }),
-);
+writeFileSync(join(outDir, "dossier.json"), buildDossier(outDir, caps));
+
+// Report what was staged, so a human (or a log) can sanity-check the run.
+let files = 0, bytes = 0;
+const walk = (dir) => {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) walk(full);
+    else { files++; bytes += statSync(full).size; }
+  }
+};
+walk(outDir);
+console.log(`staged app/ + screenshots/ into ${outDir}: ${files} files, ${bytes} bytes, dossier.json written`);
