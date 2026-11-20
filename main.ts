@@ -1,30 +1,30 @@
 // Vice City Nights — Leonida Cover Studio: the entry program.
 //
-// Takes the static app (app/) and its four screenshots (screenshots/),
-// stages them into the output directory, and writes the make.fun dossier
-// for exactly what was staged. The output directory is wiped and rebuilt
-// on every run, so two runs in a row produce byte-identical output.
+// Stages the static app (app/) and its four screenshots (screenshots/)
+// into the output directory and writes the make.fun dossier for exactly
+// what was staged. The output directory is wiped and rebuilt on every
+// run, so two runs back to back produce byte-identical output.
 
-import { cpSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildDossier } from "./vendor/makefun-app.ts";
 
 const repoRoot = dirname(fileURLToPath(import.meta.url));
-const outputDir = process.env.MAKEFUN_OUTPUT_DIR ?? "/output";
+const outDir = process.env.MAKEFUN_OUTPUT_DIR ?? "/output";
 
-// Start from an empty directory: nothing stale can sneak into the dossier.
-rmSync(outputDir, { recursive: true, force: true });
-mkdirSync(outputDir, { recursive: true });
+// Wipe first: nothing stale may leak into the dossier or the staging.
+rmSync(outDir, { recursive: true, force: true });
+mkdirSync(outDir, { recursive: true });
 
-for (const part of ["app", "screenshots"]) {
-  cpSync(join(repoRoot, part), join(outputDir, part), { recursive: true });
+for (const folder of ["app", "screenshots"]) {
+  cpSync(join(repoRoot, folder), join(outDir, folder), { recursive: true });
 }
 
-// The bounty gate's caps, passed through so this program refuses exactly
+// The bounty gate's limits, handed through so this program refuses exactly
 // where the scorer would refuse. Only text_max_bytes shapes the dossier
-// bytes; the rest are hard limits on what may be staged.
-const dossierCaps = {
+// bytes; the other entries are hard limits on what may be staged.
+const caps = {
   text_max_bytes: 163840,
   screenshots: { max: 4, max_bytes: 262144 },
   app_max_files: 993,
@@ -32,25 +32,27 @@ const dossierCaps = {
   app_path_max_bytes: 1000,
 };
 
-writeFileSync(join(outputDir, "dossier.json"), buildDossier(outputDir, dossierCaps));
+writeFileSync(join(outDir, "dossier.json"), buildDossier(outDir, caps));
 
-// The dossier is the handoff the scorer re-derives: confirm it landed.
-const dossierBytes = statSync(join(outputDir, "dossier.json")).size;
-if (dossierBytes === 0) throw new Error("dossier.json came out empty");
-console.log(`dossier.json: ${dossierBytes} bytes`);
+// The dossier is the handoff the scorer re-derives: refuse an empty one,
+// and refuse one that is not valid JSON — a corrupt dossier is worse
+// than a missing one, because it looks finished.
+const dossierSize = statSync(join(outDir, "dossier.json")).size;
+if (dossierSize === 0) throw new Error("dossier.json came out empty");
+JSON.parse(readFileSync(join(outDir, "dossier.json"), "utf8"));
+console.log(`dossier.json: ${dossierSize} bytes`);
 
-// Summarize the staging so a log line can be eyeballed after a run.
-let stagedFiles = 0;
-let stagedBytes = 0;
-const countTree = (dir) => {
+// Walk the staged tree so the log line shows what actually landed.
+function tally(dir, acc) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const full = join(dir, entry.name);
-    if (entry.isDirectory()) countTree(full);
+    if (entry.isDirectory()) tally(full, acc);
     else {
-      stagedFiles++;
-      stagedBytes += statSync(full).size;
+      acc.files += 1;
+      acc.bytes += statSync(full).size;
     }
   }
-};
-countTree(outputDir);
-console.log(`staged app/ + screenshots/ into ${outputDir}: ${stagedFiles} files, ${stagedBytes} bytes, dossier.json written`);
+  return acc;
+}
+const total = tally(outDir, { files: 0, bytes: 0 });
+console.log(`staged app/ + screenshots/ into ${outDir}: ${total.files} files, ${total.bytes} bytes, dossier.json written`);

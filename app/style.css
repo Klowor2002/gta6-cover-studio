@@ -7,15 +7,15 @@
 }
 
 :root {
-  --night: #171226;
-  --card: #221a38;
-  --card-line: #3d3260;
-  --paper: #f6effc;
-  --soft: #bcaede;
-  --sunset-a: #ff7a59;
-  --sunset-b: #ff4fa3;
-  --neon-a: #2ee6c8;
-  --neon-b: #ff2f96;
+  --ink: #141021;
+  --surface: #241b3a;
+  --surface-edge: #423465;
+  --page-text: #f7f0fd;
+  --muted: #c2b3e0;
+  --sunset-one: #ff7a59;
+  --sunset-two: #ff4fa3;
+  --neon-one: #2ee6c8;
+  --neon-two: #ff2f96;
 }
 
 * { box-sizing: border-box; }
@@ -23,39 +23,39 @@
 html, body {
   margin: 0;
   padding: 0;
-  background: var(--night);
-  color: var(--paper);
+  background: var(--ink);
+  color: var(--page-text);
   font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
 }
 
 /* ---------- header ---------- */
 
-.masthead {
+.topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 14px;
   padding: 14px 24px;
-  background: linear-gradient(90deg, #2e1646, #471739 52%, #0f3d42);
-  border-bottom: 2px solid var(--card-line);
+  background: linear-gradient(90deg, #311647, #4a1739 52%, #103f44);
+  border-bottom: 2px solid var(--surface-edge);
 }
 
-.masthead-brand { display: flex; align-items: center; gap: 14px; }
+.brand { display: flex; align-items: center; gap: 14px; }
 
-.logo-tile {
+.brand-mark {
   font-family: "Anton", sans-serif;
   font-size: 21px;
   letter-spacing: 2px;
   line-height: 1;
   color: #fff;
-  background: linear-gradient(155deg, var(--sunset-a), var(--sunset-b));
+  background: linear-gradient(155deg, var(--sunset-one), var(--sunset-two));
   padding: 11px 10px 8px;
   border-radius: 6px;
   transform: rotate(-3deg);
 }
 
-.masthead-text h1 {
+.brand-copy h1 {
   margin: 0;
   font-family: "Anton", sans-serif;
   font-weight: 400;
@@ -64,45 +64,45 @@ html, body {
   text-transform: uppercase;
 }
 
-.masthead-text p { margin: 3px 0 0; color: var(--soft); font-size: 13px; }
+.brand-copy p { margin: 3px 0 0; color: var(--muted); font-size: 13px; }
 
-.look-switch { display: flex; gap: 8px; }
+.look-picker { display: flex; gap: 8px; }
 
-.look-btn {
+.look-choice {
   font: inherit;
   font-weight: 600;
-  color: var(--soft);
+  color: var(--muted);
   background: transparent;
-  border: 1.5px solid var(--card-line);
+  border: 1.5px solid var(--surface-edge);
   border-radius: 999px;
   padding: 8px 16px;
   cursor: pointer;
 }
 
-.look-btn:hover { color: var(--paper); border-color: var(--soft); }
+.look-choice:hover { color: var(--page-text); border-color: var(--muted); }
 
-.look-btn.is-active {
+.look-choice.is-on {
   color: #fff;
   border-color: transparent;
-  background: linear-gradient(115deg, var(--sunset-a), var(--sunset-b));
+  background: linear-gradient(115deg, var(--sunset-one), var(--sunset-two));
 }
 
-.noscript-note {
+body[data-look="neon"] .look-choice.is-on {
+  background: linear-gradient(115deg, #0e7d8c, var(--neon-one));
+  color: #04121a;
+}
+
+.js-required {
   margin: 0;
   padding: 12px 24px;
-  background: #471739;
-  color: var(--paper);
+  background: #4a1739;
+  color: var(--page-text);
   font-size: 14px;
-}
-
-body[data-preset="neon"] .look-btn.is-active {
-  background: linear-gradient(115deg, #0e7d8c, var(--neon-a));
-  color: #04121a;
 }
 
 /* ---------- layout ---------- */
 
-.workspace {
+.studio {
   display: flex;
   gap: 20px;
   align-items: flex-start;
@@ -111,9 +111,9 @@ body[data-preset="neon"] .look-btn.is-active {
   margin: 0 auto;
 }
 
-.canvas-column { flex: 1 1 auto; min-width: 0; }
+.preview-pane { flex: 1 1 auto; min-width: 0; }
 
-#stage {
+#cover-canvas {
   display: block;
   width: 100%;
   height: auto;
@@ -124,92 +124,90 @@ body[data-preset="neon"] .look-btn.is-active {
   touch-action: none;
 }
 
-#stage.dragging { cursor: grabbing; }
+#cover-canvas.panning { cursor: grabbing; }
 
-.canvas-note { color: var(--soft); font-size: 13px; margin: 10px 2px 0; }
+.hint { color: var(--muted); font-size: 13px; margin: 10px 2px 0; }
 
-/* ---------- control cards ---------- */
+/* ---------- control column ---------- */
 
-.controls {
+.panel-controls {
   flex: 0 0 300px;
   display: flex;
   flex-direction: column;
   gap: 18px;
 }
 
-.card {
-  background: var(--card);
-  border: 1px solid var(--card-line);
+.box {
+  background: var(--surface);
+  border: 1px solid var(--surface-edge);
   border-radius: 10px;
   padding: 14px 16px 16px;
 }
 
-.card h2 {
+.box h2 {
   margin: 0 0 10px;
   font-size: 13px;
   letter-spacing: 1.6px;
   text-transform: uppercase;
-  color: var(--soft);
+  color: var(--muted);
 }
 
-.field-label {
+.text-label {
   display: block;
   font-size: 12px;
-  color: var(--soft);
+  color: var(--muted);
   margin: 2px 0 4px;
 }
 
-.card input[type="text"] {
+.box input[type="text"] {
   width: 100%;
   font: inherit;
-  color: var(--paper);
-  background: #150f24;
-  border: 1px solid var(--card-line);
+  color: var(--page-text);
+  background: #160f25;
+  border: 1px solid var(--surface-edge);
   border-radius: 6px;
   padding: 8px 10px;
   margin-bottom: 8px;
 }
 
-.card input[type="text"]:last-child { margin-bottom: 0; }
-
-.upload-btn {
+.upload {
   display: block;
   text-align: center;
   font-weight: 600;
   color: #fff;
-  background: linear-gradient(115deg, var(--sunset-a), var(--sunset-b));
+  background: linear-gradient(115deg, var(--sunset-one), var(--sunset-two));
   border-radius: 8px;
   padding: 10px;
   cursor: pointer;
 }
 
-.sample-line {
+.samples {
   display: flex;
   align-items: center;
   gap: 8px;
   margin-top: 10px;
   font-size: 13px;
-  color: var(--soft);
+  color: var(--muted);
 }
 
-.sample-line button,
-.export-btn {
+.samples button,
+.export {
   font: inherit;
   font-weight: 600;
-  color: var(--paper);
-  background: #2e2350;
-  border: 1px solid var(--card-line);
+  color: var(--page-text);
+  background: #302454;
+  border: 1px solid var(--surface-edge);
   border-radius: 6px;
   padding: 7px 12px;
   cursor: pointer;
 }
 
-.sample-line button:hover,
-.export-btn:hover { border-color: var(--sunset-b); }
+.samples button:hover,
+.export:hover { border-color: var(--sunset-two); }
 
-.photo-strip { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.photo-rack { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 
-.photo-strip button {
+.photo-rack button {
   padding: 0;
   border: 2px solid transparent;
   border-radius: 6px;
@@ -218,49 +216,61 @@ body[data-preset="neon"] .look-btn.is-active {
   line-height: 0;
 }
 
-.photo-strip button.is-in-panel { border-color: var(--neon-a); box-shadow: 0 0 0 2px rgba(46, 230, 200, 0.35); }
+.photo-rack button.in-use {
+  border-color: var(--neon-one);
+  box-shadow: 0 0 0 2px rgba(46, 230, 200, 0.35);
+}
 
-.photo-strip img {
+.photo-rack img {
   width: 62px;
   height: 46px;
   object-fit: cover;
   border-radius: 4px;
 }
 
-.panel-name { margin: 0 0 8px; font-weight: 600; }
+.panel-readout { margin: 0 0 8px; font-weight: 600; }
 
-.range-line {
+.slider-row {
   display: flex;
   align-items: center;
   gap: 10px;
   font-size: 13px;
-  color: var(--soft);
+  color: var(--muted);
 }
 
-.range-line input[type="range"] { flex: 1; accent-color: var(--sunset-b); }
+.slider-row input[type="range"] { flex: 1; accent-color: var(--sunset-two); }
 
-.export-list { display: flex; flex-direction: column; gap: 8px; }
+.export-stack { display: flex; flex-direction: column; gap: 8px; }
 
-.export-btn { padding: 10px; text-align: center; }
+.export { padding: 10px; text-align: center; }
 
-.fine-print { font-size: 12px; color: var(--soft); margin: 10px 0 0; }
+.note { font-size: 12px; color: var(--muted); margin: 10px 0 0; }
+
+.credit {
+  padding: 0 24px 22px;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.credit code { color: var(--page-text); }
 
 button:focus-visible,
 input:focus-visible {
-  outline: 2px solid var(--neon-a);
+  outline: 2px solid var(--neon-one);
   outline-offset: 2px;
 }
 
 /* ---------- deterministic staging: ?shot=cover hides the editor ---------- */
 
-body.shot-cover .masthead,
-body.shot-cover .controls,
-body.shot-cover .canvas-note { display: none; }
+body.shot-cover .topbar,
+body.shot-cover .panel-controls,
+body.shot-cover .hint { display: none; }
 
-body.shot-cover .workspace { padding: 0; max-width: none; }
-body.shot-cover #stage { border-radius: 0; box-shadow: none; }
+body.shot-cover .studio { padding: 0; max-width: none; }
+body.shot-cover #cover-canvas { border-radius: 0; box-shadow: none; }
 
 @media (max-width: 900px) {
-  .workspace { flex-direction: column; }
-  .controls { flex: 1 1 auto; width: 100%; }
+  .studio { flex-direction: column; }
+  .panel-controls { flex: 1 1 auto; width: 100%; }
 }

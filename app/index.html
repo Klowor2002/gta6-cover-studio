@@ -7,77 +7,79 @@
 <title>Vice City Nights — Leonida Cover Studio</title>
 <link rel="stylesheet" href="style.css">
 </head>
-<body data-preset="sunset">
-<noscript><p class="noscript-note">Vice City Nights needs JavaScript: the cover is rendered on a canvas in your browser.</p></noscript>
-<header class="masthead">
-  <div class="masthead-brand">
-    <span class="logo-tile" aria-hidden="true">VCN</span>
-    <div class="masthead-text">
+<body data-look="sunset">
+<noscript><p class="js-required">Vice City Nights needs JavaScript — the cover is painted on a canvas in your browser.</p></noscript>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true">VCN</span>
+    <div class="brand-copy">
       <h1>Vice City Nights</h1>
-      <p>Leonida Cover Studio — turn your photos into GTA-style poster covers</p>
+      <p>Leonida Cover Studio — photos in, GTA-style poster out</p>
     </div>
   </div>
-  <div class="look-switch" role="group" aria-label="Cover look">
-    <button id="preset-sunset" class="look-btn is-active" type="button">Vice Sunset</button>
-    <button id="preset-neon" class="look-btn" type="button">Neon Nights</button>
+  <div class="look-picker" role="group" aria-label="Cover look">
+    <button id="look-sunset" class="look-choice is-on" type="button">Vice Sunset</button>
+    <button id="look-neon" class="look-choice" type="button">Neon Nights</button>
   </div>
 </header>
 
-<main class="workspace">
-  <section class="canvas-column">
-    <canvas id="stage" width="1920" height="1080"></canvas>
-    <p class="canvas-note">Click a panel to pick it · drag to move its photo · scroll to zoom · double-click to swap its photo</p>
+<main class="studio">
+  <section class="preview-pane">
+    <canvas id="cover-canvas" width="1920" height="1080"></canvas>
+    <p class="hint">Click a panel to select it · drag to pan its photo · scroll to zoom · double-click to swap its photo</p>
   </section>
 
-  <aside class="controls">
-    <section class="card">
+  <aside class="panel-controls">
+    <section class="box">
       <h2>Photos</h2>
-      <label class="upload-btn">
+      <label class="upload">
         Upload photos (up to 3)
-        <input id="file-input" type="file" accept="image/*" multiple hidden>
+        <input id="photo-files" type="file" accept="image/*" multiple hidden>
       </label>
-      <div class="sample-line">
+      <div class="samples">
         <span>Or try a sample:</span>
-        <button id="sample-boulevard" type="button">Boulevard</button>
-        <button id="sample-pier" type="button">Pier</button>
+        <button id="try-boulevard" type="button">Boulevard</button>
+        <button id="try-pier" type="button">Pier</button>
       </div>
-      <div id="photo-strip" class="photo-strip" aria-label="Loaded photos"></div>
-      <p class="fine-print">Your photos are read into memory only. Nothing is uploaded anywhere.</p>
+      <div id="photo-rack" class="photo-rack" aria-label="Loaded photos"></div>
+      <p class="note">Photos are read into memory only. Nothing leaves your machine.</p>
     </section>
 
-    <section class="card">
+    <section class="box">
       <h2>Selected panel</h2>
-      <p id="panel-label" class="panel-name">Panel 1 of 3</p>
-      <label class="range-line">
+      <p id="panel-readout" class="panel-readout">Panel 1 of 3</p>
+      <label class="slider-row">
         <span>Zoom</span>
-        <input id="zoom" type="range" min="1" max="3" step="0.01" value="1">
+        <input id="panel-zoom" type="range" min="1" max="3" step="0.01" value="1">
       </label>
     </section>
 
-    <section class="card">
+    <section class="box">
       <h2>Caption</h2>
-      <label class="field-label" for="caption">Headline</label>
-      <input id="caption" type="text" maxlength="42" value="VICE CITY NIGHTS">
-      <label class="field-label" for="subtitle">Subtitle</label>
-      <input id="subtitle" type="text" maxlength="64" value="Welcome back to Leonida">
-      <label class="range-line">
+      <label class="text-label" for="headline">Headline</label>
+      <input id="headline" type="text" maxlength="42" value="VICE CITY NIGHTS">
+      <label class="text-label" for="tagline">Subtitle</label>
+      <input id="tagline" type="text" maxlength="64" value="Welcome back to Leonida">
+      <label class="slider-row">
         <span>Caption size</span>
-        <input id="caption-size" type="range" min="0.6" max="1.6" step="0.02" value="1">
+        <input id="headline-scale" type="range" min="0.6" max="1.6" step="0.02" value="1">
       </label>
     </section>
 
-    <section class="card">
+    <section class="box">
       <h2>Export PNG</h2>
-      <div class="export-list">
-        <button class="export-btn" data-size="1080x1080" type="button">1080 × 1080 · square</button>
-        <button class="export-btn" data-size="1080x1350" type="button">1080 × 1350 · portrait</button>
-        <button class="export-btn" data-size="1920x1080" type="button">1920 × 1080 · wide</button>
+      <div class="export-stack">
+        <button class="export" data-export="1080x1080" type="button">1080 × 1080 · square</button>
+        <button class="export" data-export="1080x1350" type="button">1080 × 1350 · portrait</button>
+        <button class="export" data-export="1920x1080" type="button">1920 × 1080 · wide</button>
       </div>
-      <p class="fine-print">One click renders the cover at the exact size and downloads the PNG.</p>
+      <p class="note">One click renders the cover at exactly that size and downloads the PNG.</p>
     </section>
   </aside>
 </main>
 
 <script type="module" src="src/app.js"></script>
+<footer class="credit">Caption typeface Anton, licensed under the SIL Open Font License — see <code>app/fonts/OFL.txt</code>.</footer>
 </body>
 </html>

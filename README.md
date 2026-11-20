@@ -4,22 +4,23 @@
 [![rank](https://make.fun/badge/gta6-cover-art-01/Klowor2002/gta6-cover-studio/rank.svg)](https://make.fun/bounty/gta6-cover-art-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01)
 [![reward](https://make.fun/badge/gta6-cover-art-01/Klowor2002/gta6-cover-studio/reward.svg)](https://make.fun/bounty/gta6-cover-art-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01)
 
-Drop in your photos, write a caption, and walk away with a multi-panel,
-GTA-poster-style cover rendered on a canvas in your browser and exported
-as an exact-size PNG. Built for the make.fun bounty `gta6-cover-art-01`.
-Everything visual here is original work — no Rockstar Games logos,
-artwork, or fonts anywhere.
+Drop your photos in, write a caption, and export a multi-panel cover in
+the style of a GTA poster — rendered on a canvas in your browser and
+saved as an exact-size PNG. Built for the make.fun bounty
+`gta6-cover-art-01`. All artwork here is original; there are no Rockstar
+Games logos, artwork, or fonts anywhere in the app.
 
-## Two looks in one app
+## Two looks, one app
 
-- **Vice Sunset** (default): three panels cut on the diagonal — a tall
-  hero on the left, two stacked on the right, white gutters between them —
-  graded warm orange into pink into purple, finished with halftone dots
-  and a vignette, and a bold Anton caption band across the bottom.
+- **Vice Sunset** (the default): a three-panel diagonal collage — a
+  tall hero panel on the left, two stacked panels on the right, white
+  gutters between them — graded warm orange into pink into purple,
+  finished with halftone dots and a vignette, with a bold Anton caption
+  band across the bottom.
 - **Neon Nights**: a four-panel grid with a teal-and-magenta night grade
-  and a caption that glows like a wet street sign.
+  and a caption that glows like a sign on a wet street.
 
-Switching looks re-renders the cover instantly and keeps your photos,
+Switching looks re-renders the cover on the spot and keeps your photos,
 crops, and words exactly where you left them.
 
 | | Vice Sunset | Neon Nights |
@@ -52,13 +53,21 @@ node serve.ts
 # then visit http://localhost:8080
 ```
 
-Any static file server pointed at `app/` works the same way. The caption
-typeface is Anton, licensed under the SIL Open Font License and vendored
-in `app/fonts/` next to its `OFL.txt`.
+Any static file server pointed at `app/` works the same way. The
+caption typeface is Anton, licensed under the SIL Open Font License and
+vendored in `app/fonts/` next to its `OFL.txt`.
+
+## Checking the exports
+
+Every export is a PNG at exactly the size on its button — 1080 × 1080,
+1080 × 1350, or 1920 × 1080. A quick check after exporting: open the
+downloaded file and confirm its pixel dimensions match the button you
+clicked. The caption is set in Anton, so if the headline ever renders in
+a plain fallback face, `app/fonts/Anton-Regular.woff2` failed to load.
 
 ## Staging a shot
 
-`app/index.html` reads a deterministic staging query, useful for
+`app/index.html` reads a deterministic staging query, handy for
 screenshots and previews:
 
 ```
