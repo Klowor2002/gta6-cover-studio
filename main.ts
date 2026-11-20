@@ -1,29 +1,30 @@
-// Vice City Nights — Leonida Cover Studio: entry program.
+// Vice City Nights — Leonida Cover Studio: the entry program.
 //
-// Stages the static app and the screenshots into the output directory,
-// then writes the make.fun dossier that describes exactly what was
-// staged. The staging dir is rebuilt from scratch on every run so two
-// consecutive runs produce byte-identical output.
+// Takes the static app (app/) and its four screenshots (screenshots/),
+// stages them into the output directory, and writes the make.fun dossier
+// for exactly what was staged. The output directory is wiped and rebuilt
+// on every run, so two runs in a row produce byte-identical output.
 
 import { cpSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildDossier } from "./vendor/makefun-app.ts";
 
-const here = dirname(fileURLToPath(import.meta.url));
-const outDir = process.env.MAKEFUN_OUTPUT_DIR ?? "/output";
+const repoRoot = dirname(fileURLToPath(import.meta.url));
+const outputDir = process.env.MAKEFUN_OUTPUT_DIR ?? "/output";
 
-// Empty staging dir first: no stale file can leak into the dossier.
-rmSync(outDir, { recursive: true, force: true });
-mkdirSync(outDir, { recursive: true });
+// Start from an empty directory: nothing stale can sneak into the dossier.
+rmSync(outputDir, { recursive: true, force: true });
+mkdirSync(outputDir, { recursive: true });
 
-for (const name of ["app", "screenshots"]) {
-  cpSync(join(here, name), join(outDir, name), { recursive: true });
+for (const part of ["app", "screenshots"]) {
+  cpSync(join(repoRoot, part), join(outputDir, part), { recursive: true });
 }
 
-// The gate's caps, mirrored so this program refuses exactly where the
-// scorer would: the text budget shapes the dossier bytes, the rest refuse.
-const caps = {
+// The bounty gate's caps, passed through so this program refuses exactly
+// where the scorer would refuse. Only text_max_bytes shapes the dossier
+// bytes; the rest are hard limits on what may be staged.
+const dossierCaps = {
   text_max_bytes: 163840,
   screenshots: { max: 4, max_bytes: 262144 },
   app_max_files: 993,
@@ -31,16 +32,25 @@ const caps = {
   app_path_max_bytes: 1000,
 };
 
-writeFileSync(join(outDir, "dossier.json"), buildDossier(outDir, caps));
+writeFileSync(join(outputDir, "dossier.json"), buildDossier(outputDir, dossierCaps));
 
-// Report what was staged, so a human (or a log) can sanity-check the run.
-let files = 0, bytes = 0;
-const walk = (dir) => {
+// The dossier is the handoff the scorer re-derives: confirm it landed.
+const dossierBytes = statSync(join(outputDir, "dossier.json")).size;
+if (dossierBytes === 0) throw new Error("dossier.json came out empty");
+console.log(`dossier.json: ${dossierBytes} bytes`);
+
+// Summarize the staging so a log line can be eyeballed after a run.
+let stagedFiles = 0;
+let stagedBytes = 0;
+const countTree = (dir) => {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const full = join(dir, entry.name);
-    if (entry.isDirectory()) walk(full);
-    else { files++; bytes += statSync(full).size; }
+    if (entry.isDirectory()) countTree(full);
+    else {
+      stagedFiles++;
+      stagedBytes += statSync(full).size;
+    }
   }
 };
-walk(outDir);
-console.log(`staged app/ + screenshots/ into ${outDir}: ${files} files, ${bytes} bytes, dossier.json written`);
+countTree(outputDir);
+console.log(`staged app/ + screenshots/ into ${outputDir}: ${stagedFiles} files, ${stagedBytes} bytes, dossier.json written`);

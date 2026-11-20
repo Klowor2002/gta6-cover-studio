@@ -3,74 +3,78 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Vice City Nights — turn your photos into multi-panel GTA-style poster covers and export exact-size PNGs.">
 <title>Vice City Nights — Leonida Cover Studio</title>
 <link rel="stylesheet" href="style.css">
 </head>
-<body>
-<header class="topbar">
-  <div class="brand">
-    <span class="brand-mark">VCN</span>
-    <div>
+<body data-preset="sunset">
+<noscript><p class="noscript-note">Vice City Nights needs JavaScript: the cover is rendered on a canvas in your browser.</p></noscript>
+<header class="masthead">
+  <div class="masthead-brand">
+    <span class="logo-tile" aria-hidden="true">VCN</span>
+    <div class="masthead-text">
       <h1>Vice City Nights</h1>
-      <p>Leonida Cover Studio — GTA-style poster covers from your photos</p>
+      <p>Leonida Cover Studio — turn your photos into GTA-style poster covers</p>
     </div>
   </div>
-  <div class="preset-switch" role="group" aria-label="Style preset">
-    <button id="preset-sunset" class="preset-btn active" type="button">Vice Sunset</button>
-    <button id="preset-neon" class="preset-btn" type="button">Neon Nights</button>
+  <div class="look-switch" role="group" aria-label="Cover look">
+    <button id="preset-sunset" class="look-btn is-active" type="button">Vice Sunset</button>
+    <button id="preset-neon" class="look-btn" type="button">Neon Nights</button>
   </div>
 </header>
 
-<main class="layout">
-  <section class="stage-wrap">
+<main class="workspace">
+  <section class="canvas-column">
     <canvas id="stage" width="1920" height="1080"></canvas>
-    <p class="stage-hint">Click a panel to select it · drag to pan · scroll to zoom · double-click to swap its photo</p>
+    <p class="canvas-note">Click a panel to pick it · drag to move its photo · scroll to zoom · double-click to swap its photo</p>
   </section>
 
-  <aside class="panel">
-    <div class="group">
+  <aside class="controls">
+    <section class="card">
       <h2>Photos</h2>
-      <label class="file-btn">
+      <label class="upload-btn">
         Upload photos (up to 3)
         <input id="file-input" type="file" accept="image/*" multiple hidden>
       </label>
-      <div class="sample-row">
-        <span>Try a sample:</span>
+      <div class="sample-line">
+        <span>Or try a sample:</span>
         <button id="sample-boulevard" type="button">Boulevard</button>
         <button id="sample-pier" type="button">Pier</button>
       </div>
       <div id="photo-strip" class="photo-strip" aria-label="Loaded photos"></div>
-      <p class="tiny">Photos stay on your machine — nothing is uploaded.</p>
-    </div>
+      <p class="fine-print">Your photos are read into memory only. Nothing is uploaded anywhere.</p>
+    </section>
 
-    <div class="group">
+    <section class="card">
       <h2>Selected panel</h2>
-      <p id="panel-label" class="panel-label">Panel 1</p>
-      <label class="slider-row">
+      <p id="panel-label" class="panel-name">Panel 1 of 3</p>
+      <label class="range-line">
         <span>Zoom</span>
         <input id="zoom" type="range" min="1" max="3" step="0.01" value="1">
       </label>
-    </div>
+    </section>
 
-    <div class="group">
+    <section class="card">
       <h2>Caption</h2>
+      <label class="field-label" for="caption">Headline</label>
       <input id="caption" type="text" maxlength="42" value="VICE CITY NIGHTS">
+      <label class="field-label" for="subtitle">Subtitle</label>
       <input id="subtitle" type="text" maxlength="64" value="Welcome back to Leonida">
-      <label class="slider-row">
+      <label class="range-line">
         <span>Caption size</span>
         <input id="caption-size" type="range" min="0.6" max="1.6" step="0.02" value="1">
       </label>
-    </div>
+    </section>
 
-    <div class="group">
+    <section class="card">
       <h2>Export PNG</h2>
-      <div class="export-row">
-        <button class="export-btn" data-size="1080x1080" type="button">1080 × 1080</button>
-        <button class="export-btn" data-size="1080x1350" type="button">1080 × 1350</button>
-        <button class="export-btn" data-size="1920x1080" type="button">1920 × 1080</button>
+      <div class="export-list">
+        <button class="export-btn" data-size="1080x1080" type="button">1080 × 1080 · square</button>
+        <button class="export-btn" data-size="1080x1350" type="button">1080 × 1350 · portrait</button>
+        <button class="export-btn" data-size="1920x1080" type="button">1920 × 1080 · wide</button>
       </div>
-      <p class="tiny">One click — the cover renders at the exact size and downloads.</p>
-    </div>
+      <p class="fine-print">One click renders the cover at the exact size and downloads the PNG.</p>
+    </section>
   </aside>
 </main>
 

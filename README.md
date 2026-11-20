@@ -4,24 +4,23 @@
 [![rank](https://make.fun/badge/gta6-cover-art-01/Klowor2002/gta6-cover-studio/rank.svg)](https://make.fun/bounty/gta6-cover-art-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01)
 [![reward](https://make.fun/badge/gta6-cover-art-01/Klowor2002/gta6-cover-studio/reward.svg)](https://make.fun/bounty/gta6-cover-art-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01)
 
-A tiny studio that turns your photos and a caption into multi-panel,
-GTA-poster-style cover art — rendered on a canvas in your browser and
-exported as an exact-size PNG, ready to post. Made for the make.fun
-bounty `gta6-cover-art-01`. Every visual here is original work; no
-Rockstar Games logos, artwork, or fonts are used.
+Drop in your photos, write a caption, and walk away with a multi-panel,
+GTA-poster-style cover rendered on a canvas in your browser and exported
+as an exact-size PNG. Built for the make.fun bounty `gta6-cover-art-01`.
+Everything visual here is original work — no Rockstar Games logos,
+artwork, or fonts anywhere.
 
-## The two looks
+## Two looks in one app
 
-- **Vice Sunset** (the default) lays three panels on diagonal cuts — a
-  tall hero panel on the left, two stacked panels on the right, paper
-  gutters between them — and grades everything warm: orange melting
-  into pink into purple, a halftone-dot finish, and a bold caption band
-  along the bottom set in Anton.
-- **Neon Nights** switches to a four-panel grid with a teal-and-magenta
-  night grade and a caption that glows like a wet street sign.
+- **Vice Sunset** (default): three panels cut on the diagonal — a tall
+  hero on the left, two stacked on the right, white gutters between them —
+  graded warm orange into pink into purple, finished with halftone dots
+  and a vignette, and a bold Anton caption band across the bottom.
+- **Neon Nights**: a four-panel grid with a teal-and-magenta night grade
+  and a caption that glows like a wet street sign.
 
-Flip between them with the buttons at the top; the cover re-renders on
-the spot, keeping your photos, crops, and words.
+Switching looks re-renders the cover instantly and keeps your photos,
+crops, and words exactly where you left them.
 
 | | Vice Sunset | Neon Nights |
 | --- | --- | --- |
@@ -30,48 +29,48 @@ the spot, keeping your photos, crops, and words.
 | Caption | white Anton on a dark band | glowing neon lettering |
 | Finish | halftone dots + vignette | deep vignette |
 
-## Making a cover
+## How to make a cover
 
 1. **Add photos.** Upload up to three from your device — they are read
    into memory only and never leave the machine — or start from one of
-   the two bundled samples (a boulevard and a pier at golden hour).
+   the two bundled samples, a boulevard and a pier at golden hour.
 2. **Arrange the panels.** Click a panel to select it, drag to pan its
    photo, scroll or use the slider to zoom, double-click to swap which
-   photo fills it. A single photo may fill several panels, each with
-   its own crop.
+   photo fills it. One photo can fill several panels, each with its own
+   crop.
 3. **Write the caption.** Edit the headline and subtitle live and dial
-   the caption size to taste.
+   the caption size up or down.
 4. **Export.** One click per size — 1080 × 1080, 1080 × 1350, or
    1920 × 1080 — and the PNG downloads at exactly that size.
 
 ## Running it
 
-There is no build step and the app needs no network. Either serve the
-repo root and open the app:
+No build step, no network. Serve the repo root and open the app:
 
 ```sh
 node serve.ts
 # then visit http://localhost:8080
 ```
 
-…or point any static file server at `app/`. The caption typeface is
-Anton, licensed under the SIL Open Font License and vendored in
-`app/fonts/` next to its `OFL.txt`.
+Any static file server pointed at `app/` works the same way. The caption
+typeface is Anton, licensed under the SIL Open Font License and vendored
+in `app/fonts/` next to its `OFL.txt`.
 
 ## Staging a shot
 
-`app/index.html` understands a deterministic staging query, handy for
+`app/index.html` reads a deterministic staging query, useful for
 screenshots and previews:
 
 ```
 ?shot=cover|editor&photo=boulevard|pier&caption=...&subtitle=...&preset=sunset|neon&size=1080x1080|1080x1350|1920x1080
 ```
 
-It pre-loads a sample photo, applies the caption, preset, and size,
-and `shot=cover` renders the cover full-viewport with the editor
-chrome hidden.
+It pre-loads a sample photo, applies the caption, preset, and size, and
+`shot=cover` renders the cover full-viewport with the editor chrome
+hidden. The same URL always stages the same cover, so a screenshot taken
+from it is reproducible.
 
-## Layout of this repo
+## What's in this repo
 
 - `app/index.html`, `app/style.css`, `app/src/app.js` — the whole app:
   one page, one stylesheet, one ES module, canvas 2D only.

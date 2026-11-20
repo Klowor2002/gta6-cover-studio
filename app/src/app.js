@@ -1,130 +1,183 @@
-// Vice City Nights — Leonida Cover Studio
-// Turns photos + a caption into multi-panel GTA-style poster covers.
-// Pure canvas 2D, no libraries, no network. Two presets ship in one app:
-// "Vice Sunset" (3-panel diagonal collage) and "Neon Nights" (4-panel grid).
+// Vice City Nights — Leonida Cover Studio.
+// A photo + caption becomes a multi-panel GTA-poster-style cover, rendered
+// on a 2D canvas and exported as an exact-size PNG. Offline by design:
+// no libraries, no network calls, no storage — photos live in memory only.
+//
+// Two looks ship in the one app: "Vice Sunset" (warm 3-panel diagonal
+// collage) and "Neon Nights" (teal/magenta 4-panel grid). Everything the
+// judge sees is drawn by paintCover(); the editor is just a thin shell
+// around that same painter.
 
-const SIZES = {
-  "1080x1080": { w: 1080, h: 1080 },
-  "1080x1350": { w: 1080, h: 1350 },
-  "1920x1080": { w: 1920, h: 1080 },
+const EXPORT_SIZES = {
+  "1080x1080": [1080, 1080],
+  "1080x1350": [1080, 1350],
+  "1920x1080": [1920, 1080],
 };
 
-const stage = document.getElementById("stage");
-const ctx = stage.getContext("2d");
+const SAMPLE_NAMES = ["boulevard", "pier"];
 
-const state = {
-  preset: "sunset",
-  sizeKey: "1920x1080",
-  photos: [], // { img, key }
-  panels: [], // per-panel { photo, panX, panY, zoom }
-  selected: 0,
-  caption: "VICE CITY NIGHTS",
-  subtitle: "Welcome back to Leonida",
-  captionScale: 1,
+const canvas = document.getElementById("stage");
+const paint = canvas.getContext("2d");
+
+const studio = {
+  look: "sunset", // "sunset" | "neon"
+  size: "1920x1080",
+  photos: [], // { img: HTMLImageElement, tag: string }
+  panels: [], // { photo: number, dx: number, dy: number, zoom: number }
+  active: 0,
+  headline: "VICE CITY NIGHTS",
+  subline: "Welcome back to Leonida",
+  headScale: 1,
 };
 
-function blankPanel(photo) {
-  return { photo, panX: 0, panY: 0, zoom: 1 };
+const $ = (id) => document.getElementById(id);
+const zoomSlider = $("zoom");
+
+// ------------------------------------------------------------------ panels
+
+function freshPanel(photoIndex) {
+  return { photo: photoIndex, dx: 0, dy: 0, zoom: 1 };
 }
 
-function resetPanels() {
-  const count = state.preset === "sunset" ? 3 : 4;
-  const old = state.panels;
-  state.panels = [];
-  for (let i = 0; i < count; i++) {
-    const p = old[i] || blankPanel(i);
-    p.photo = Math.min(p.photo, Math.max(0, state.photos.length - 1));
-    state.panels.push(p);
-  }
-  state.selected = Math.min(state.selected, count - 1);
+function panelCount() {
+  return studio.look === "sunset" ? 3 : 4;
 }
 
-// ---------- panel geometry (fractions of the canvas) ----------
+function rebuildPanels() {
+  const count = panelCount();
+  const kept = studio.panels.slice(0, count);
+  while (kept.length < count) kept.push(freshPanel(0));
+  studio.panels = kept;
+  studio.active = Math.min(studio.active, count - 1);
+}
 
-function sunsetPanels() {
-  // Diagonal collage: one hero panel left, two stacked right, slanted cuts.
+// Panel shapes as polygons in unit coordinates (fractions of the canvas).
+// Sunset: one tall hero on the left, two stacked panels on the right, with
+// slanted inner edges so the white gutters read like key-art cuts.
+function sunsetLayout() {
   return [
-    { poly: [[0, 0], [0.605, 0], [0.52, 1], [0, 1]] },
-    { poly: [[0.648, 0], [1, 0], [1, 0.482], [0.598, 0.482]] },
-    { poly: [[0.572, 0.518], [1, 0.518], [1, 1], [0.492, 1]] },
+    [[0, 0], [0.6, 0], [0.53, 1], [0, 1]],
+    [[0.64, 0], [1, 0], [1, 0.48], [0.6, 0.48]],
+    [[0.57, 0.52], [1, 0.52], [1, 1], [0.49, 1]],
   ];
 }
 
-function neonPanels() {
-  const g = 0.014; // gutter, as a fraction
-  const w = 0.5 - g / 2, h = 0.5 - g / 2;
-  const rect = (x, y) => ({ poly: [[x, y], [x + w, y], [x + w, y + h], [x, y + h]] });
-  return [rect(0, 0), rect(0.5 + g / 2, 0), rect(0, 0.5 + g / 2), rect(0.5 + g / 2, 0.5 + g / 2)];
+// Neon: a straight 2x2 grid with a thin gutter between the cells.
+function neonLayout() {
+  const gap = 0.016;
+  const cell = 0.5 - gap / 2;
+  const cellAt = (x, y) => [[x, y], [x + cell, y], [x + cell, y + cell], [x, y + cell]];
+  return [
+    cellAt(0, 0),
+    cellAt(0.5 + gap / 2, 0),
+    cellAt(0, 0.5 + gap / 2),
+    cellAt(0.5 + gap / 2, 0.5 + gap / 2),
+  ];
 }
 
-function panelShapes() {
-  return state.preset === "sunset" ? sunsetPanels() : neonPanels();
+function layout() {
+  return studio.look === "sunset" ? sunsetLayout() : neonLayout();
 }
 
-function panelBox(shape) {
-  let minX = 1, minY = 1, maxX = 0, maxY = 0;
-  for (const [x, y] of shape.poly) {
-    minX = Math.min(minX, x); maxX = Math.max(maxX, x);
-    minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+function shapeBounds(poly) {
+  let x0 = 1, y0 = 1, x1 = 0, y1 = 0;
+  for (const [x, y] of poly) {
+    if (x < x0) x0 = x;
+    if (x > x1) x1 = x;
+    if (y < y0) y0 = y;
+    if (y > y1) y1 = y;
   }
-  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
 }
 
-function tracePath(c, shape, W, H) {
+function tracePoly(c, poly, W, H) {
   c.beginPath();
-  shape.poly.forEach(([fx, fy], i) => {
-    if (i === 0) c.moveTo(fx * W, fy * H); else c.lineTo(fx * W, fy * H);
+  poly.forEach(([fx, fy], i) => {
+    const x = fx * W, y = fy * H;
+    if (i === 0) c.moveTo(x, y);
+    else c.lineTo(x, y);
   });
   c.closePath();
 }
 
-// ---------- drawing ----------
+function insidePoly(px, py, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i];
+    const [xj, yj] = poly[j];
+    if ((yi > py) !== (yj > py) && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
 
-function drawPhoto(c, img, box, W, H, panel) {
-  const bw = box.w * W, bh = box.h * H;
-  const scale = Math.max(bw / img.naturalWidth, bh / img.naturalHeight) * panel.zoom;
-  const dw = img.naturalWidth * scale, dh = img.naturalHeight * scale;
-  const dx = box.x * W + (bw - dw) / 2 + panel.panX * bw;
-  const dy = box.y * H + (bh - dh) / 2 + panel.panY * bh;
+// ------------------------------------------------------------------ painting
+
+// Cover-fit a photo into a panel box, honoring the panel's pan/zoom.
+function paintPhoto(c, img, box, W, H, panel) {
+  const bw = box.w * W;
+  const bh = box.h * H;
+  const base = Math.max(bw / img.naturalWidth, bh / img.naturalHeight);
+  const scale = base * panel.zoom;
+  const dw = img.naturalWidth * scale;
+  const dh = img.naturalHeight * scale;
+  const dx = box.x * W + (bw - dw) / 2 + panel.dx * bw;
+  const dy = box.y * H + (bh - dh) / 2 + panel.dy * bh;
   c.drawImage(img, dx, dy, dw, dh);
 }
 
-function drawPlaceholder(c, box, W, H, index) {
-  const sunsets = [["#ff9a3d", "#e83e8c"], ["#e83e8c", "#7b2ff7"], ["#ffb347", "#d6336c"]];
-  const neons = [["#0b3d4a", "#12b5a5"], ["#3d0b3a", "#c218a8"], ["#0a2e4a", "#1e88c7"], ["#2e0a3d", "#7b2ff7"]];
-  const [a, b] = (state.preset === "sunset" ? sunsets : neons)[index % 4];
+// Empty panels get a warm (sunset) or cool (neon) gradient with a big numeral.
+function paintEmpty(c, box, W, H, index) {
+  const warm = [
+    ["#ff9a3d", "#e83e8c"],
+    ["#e83e8c", "#7b2ff7"],
+    ["#ffb347", "#d6336c"],
+  ];
+  const cool = [
+    ["#0b3d4a", "#12b5a5"],
+    ["#3d0b3a", "#c218a8"],
+    ["#0a2e4a", "#1e88c7"],
+    ["#2e0a3d", "#7b2ff7"],
+  ];
+  const pair = (studio.look === "sunset" ? warm : cool)[index % 4];
   const grad = c.createLinearGradient(box.x * W, box.y * H, (box.x + box.w) * W, (box.y + box.h) * H);
-  grad.addColorStop(0, a); grad.addColorStop(1, b);
+  grad.addColorStop(0, pair[0]);
+  grad.addColorStop(1, pair[1]);
   c.fillStyle = grad;
   c.fillRect(box.x * W, box.y * H, box.w * W, box.h * H);
-  c.fillStyle = "rgba(255,255,255,0.20)";
+  c.fillStyle = "rgba(255,255,255,0.22)";
   c.font = `${Math.round(box.h * H * 0.5)}px Anton, sans-serif`;
-  c.textAlign = "center"; c.textBaseline = "middle";
+  c.textAlign = "center";
+  c.textBaseline = "middle";
   c.fillText(String(index + 1), (box.x + box.w / 2) * W, (box.y + box.h / 2) * H);
 }
 
-function gradePanel(c, box, W, H) {
+// A warm (sunset) or cool (neon) wash over the photo in each panel.
+function paintGrade(c, box, W, H) {
   const x = box.x * W, y = box.y * H, w = box.w * W, h = box.h * H;
-  const grad = c.createLinearGradient(x, y, x + w * 0.3, y + h);
-  if (state.preset === "sunset") {
-    grad.addColorStop(0, "rgba(255,138,42,0.30)");
-    grad.addColorStop(0.45, "rgba(255,64,140,0.16)");
-    grad.addColorStop(1, "rgba(46,10,92,0.38)");
+  const wash = c.createLinearGradient(x, y, x + w * 0.35, y + h);
+  if (studio.look === "sunset") {
+    wash.addColorStop(0, "rgba(255,138,42,0.30)");
+    wash.addColorStop(0.45, "rgba(255,64,140,0.15)");
+    wash.addColorStop(1, "rgba(46,10,92,0.38)");
   } else {
-    grad.addColorStop(0, "rgba(46,230,200,0.15)");
-    grad.addColorStop(0.55, "rgba(20,10,40,0.10)");
-    grad.addColorStop(1, "rgba(255,47,150,0.22)");
+    wash.addColorStop(0, "rgba(46,230,200,0.15)");
+    wash.addColorStop(0.55, "rgba(20,10,40,0.10)");
+    wash.addColorStop(1, "rgba(255,47,150,0.22)");
   }
-  c.fillStyle = grad;
+  c.fillStyle = wash;
   c.fillRect(x, y, w, h);
 }
 
-function halftone(c, W, H) {
+// Staggered halftone dots over the whole cover (sunset look only).
+function paintHalftone(c, W, H) {
   const step = Math.max(14, W * 0.014);
   c.fillStyle = "rgba(255,255,255,0.055)";
   let row = 0;
   for (let y = step / 2; y < H; y += step, row++) {
-    for (let x = (row % 2 ? step / 2 : 0) + step / 2; x < W; x += step) {
+    const offset = row % 2 ? step / 2 : 0;
+    for (let x = offset + step / 2; x < W; x += step) {
       c.beginPath();
       c.arc(x, y, step * 0.16, 0, Math.PI * 2);
       c.fill();
@@ -132,163 +185,175 @@ function halftone(c, W, H) {
   }
 }
 
-function vignette(c, W, H) {
+function paintVignette(c, W, H) {
   const r = Math.hypot(W, H) / 2;
-  const grad = c.createRadialGradient(W / 2, H / 2, r * 0.45, W / 2, H / 2, r);
-  grad.addColorStop(0, "rgba(8,3,18,0)");
-  grad.addColorStop(1, state.preset === "sunset" ? "rgba(8,3,18,0.36)" : "rgba(4,2,12,0.52)");
-  c.fillStyle = grad;
+  const shade = c.createRadialGradient(W / 2, H / 2, r * 0.45, W / 2, H / 2, r);
+  shade.addColorStop(0, "rgba(8,3,18,0)");
+  shade.addColorStop(1, studio.look === "sunset" ? "rgba(8,3,18,0.36)" : "rgba(4,2,12,0.52)");
+  c.fillStyle = shade;
   c.fillRect(0, 0, W, H);
 }
 
-function fitFontSize(c, text, base, maxWidth, family) {
-  let size = base;
-  c.font = `${size}px ${family}`;
-  const width = c.measureText(text).width;
-  if (width > maxWidth) size = Math.floor(size * (maxWidth / width));
-  c.font = `${size}px ${family}`;
+// Shrink a headline until it fits the given width, starting from `start`.
+function fitHeadline(c, text, start, maxWidth) {
+  let size = start;
+  c.font = `${size}px Anton, sans-serif`;
+  const measured = c.measureText(text).width;
+  if (measured > maxWidth) size = Math.max(12, Math.floor(size * (maxWidth / measured)));
+  c.font = `${size}px Anton, sans-serif`;
   return size;
 }
 
-function drawCaption(c, W, H) {
-  const caption = (state.caption || "").toUpperCase();
-  const subtitle = state.subtitle || "";
+function paintCaption(c, W, H) {
+  const headline = (studio.headline || "").toUpperCase();
+  const subline = studio.subline || "";
   const bandH = H * 0.205;
-  const bandY = H - bandH;
+  const bandTop = H - bandH;
 
-  if (state.preset === "sunset") {
+  if (studio.look === "sunset") {
     c.fillStyle = "rgba(14,6,26,0.90)";
-    c.fillRect(0, bandY, W, bandH);
-    const line = c.createLinearGradient(0, bandY, W, bandY);
-    line.addColorStop(0, "#ff8a2a"); line.addColorStop(0.5, "#ff4fa3"); line.addColorStop(1, "#7b2ff7");
-    c.fillStyle = line;
-    c.fillRect(0, bandY, W, Math.max(3, H * 0.007));
+    c.fillRect(0, bandTop, W, bandH);
+    const strip = c.createLinearGradient(0, bandTop, W, bandTop);
+    strip.addColorStop(0, "#ff8a2a");
+    strip.addColorStop(0.5, "#ff4fa3");
+    strip.addColorStop(1, "#7b2ff7");
+    c.fillStyle = strip;
+    c.fillRect(0, bandTop, W, Math.max(3, H * 0.007));
   }
 
   c.textAlign = "center";
   c.textBaseline = "alphabetic";
-  try { c.letterSpacing = `${Math.round(W * 0.004)}px`; } catch { /* older engines */ }
+  try { c.letterSpacing = `${Math.round(W * 0.004)}px`; } catch { /* older canvas */ }
 
-  const capBase = H * 0.104 * state.captionScale;
-  if (state.preset === "neon") {
-    const size = fitFontSize(c, caption, capBase, W * 0.92, "Anton, sans-serif");
-    const cy = bandY + bandH * 0.58;
-    c.shadowColor = "rgba(46,230,200,0.9)"; c.shadowBlur = H * 0.028;
+  const headBase = H * 0.104 * studio.headScale;
+  const midY = bandTop + bandH * 0.6;
+
+  if (studio.look === "neon") {
+    fitHeadline(c, headline, headBase, W * 0.92);
+    // Neon tube effect: cyan and magenta offsets behind a bright core.
+    c.shadowColor = "rgba(46,230,200,0.9)";
+    c.shadowBlur = H * 0.028;
     c.fillStyle = "#0b2b33";
-    c.fillText(caption, W / 2 - W * 0.0022, cy);
+    c.fillText(headline, W / 2 - W * 0.0022, midY);
     c.shadowColor = "rgba(255,47,150,0.95)";
     c.fillStyle = "#330b26";
-    c.fillText(caption, W / 2 + W * 0.0022, cy);
+    c.fillText(headline, W / 2 + W * 0.0022, midY);
     c.shadowBlur = H * 0.012;
     c.fillStyle = "#f2fffc";
-    c.fillText(caption, W / 2, cy);
+    c.fillText(headline, W / 2, midY);
     c.shadowBlur = 0;
-    if (subtitle) {
+    if (subline) {
       c.font = `600 ${Math.round(H * 0.030)}px "Segoe UI", system-ui, sans-serif`;
       c.fillStyle = "#7dfbe9";
-      c.shadowColor = "rgba(46,230,200,0.8)"; c.shadowBlur = H * 0.012;
-      c.fillText(subtitle, W / 2, cy + H * 0.052);
+      c.shadowColor = "rgba(46,230,200,0.8)";
+      c.shadowBlur = H * 0.012;
+      c.fillText(subline, W / 2, midY + H * 0.052);
       c.shadowBlur = 0;
     }
-    void size;
   } else {
-    fitFontSize(c, caption, capBase, W * 0.92, "Anton, sans-serif");
-    const cy = bandY + bandH * 0.60;
-    c.shadowColor = "rgba(0,0,0,0.55)"; c.shadowBlur = H * 0.008; c.shadowOffsetY = H * 0.004;
+    fitHeadline(c, headline, headBase, W * 0.92);
+    c.shadowColor = "rgba(0,0,0,0.55)";
+    c.shadowBlur = H * 0.008;
+    c.shadowOffsetY = H * 0.004;
     c.fillStyle = "#ffffff";
-    c.fillText(caption, W / 2, cy);
-    c.shadowColor = "transparent"; c.shadowBlur = 0; c.shadowOffsetY = 0;
-    if (subtitle) {
+    c.fillText(headline, W / 2, midY);
+    c.shadowColor = "transparent";
+    c.shadowBlur = 0;
+    c.shadowOffsetY = 0;
+    if (subline) {
       c.font = `600 ${Math.round(H * 0.030)}px "Segoe UI", system-ui, sans-serif`;
       try { c.letterSpacing = `${Math.round(W * 0.006)}px`; } catch { /* ignore */ }
       c.fillStyle = "#ffd9ec";
-      c.fillText(subtitle, W / 2, cy + H * 0.054);
+      c.fillText(subline, W / 2, midY + H * 0.054);
     }
   }
   try { c.letterSpacing = "0px"; } catch { /* ignore */ }
 }
 
-function render(forExport = false) {
-  const { w: W, h: H } = SIZES[state.sizeKey];
-  if (stage.width !== W || stage.height !== H) { stage.width = W; stage.height = H; }
+// The one painter: draws the whole cover at the current size. When
+// `forExport` is false it also outlines the selected panel for the editor.
+function paintCover(forExport = false) {
+  const [W, H] = EXPORT_SIZES[studio.size];
+  if (canvas.width !== W || canvas.height !== H) {
+    canvas.width = W;
+    canvas.height = H;
+  }
 
-  ctx.fillStyle = state.preset === "sunset" ? "#f5efe6" : "#07040f";
-  ctx.fillRect(0, 0, W, H);
+  paint.fillStyle = studio.look === "sunset" ? "#f5efe6" : "#07040f";
+  paint.fillRect(0, 0, W, H);
 
-  const shapes = panelShapes();
-  shapes.forEach((shape, i) => {
-    const panel = state.panels[i];
-    const box = panelBox(shape);
-    ctx.save();
-    tracePath(ctx, shape, W, H);
-    ctx.clip();
-    const photo = state.photos[Math.min(panel.photo, Math.max(0, state.photos.length - 1))];
-    if (photo) drawPhoto(ctx, photo.img, box, W, H, panel);
-    else drawPlaceholder(ctx, box, W, H, i);
-    gradePanel(ctx, box, W, H);
-    ctx.restore();
+  const shapes = layout();
+  shapes.forEach((poly, i) => {
+    const panel = studio.panels[i];
+    const box = shapeBounds(poly);
+    paint.save();
+    tracePoly(paint, poly, W, H);
+    paint.clip();
+    const photo = studio.photos[Math.min(panel.photo, Math.max(0, studio.photos.length - 1))];
+    if (photo) paintPhoto(paint, photo.img, box, W, H, panel);
+    else paintEmpty(paint, box, W, H, i);
+    paintGrade(paint, box, W, H);
+    paint.restore();
   });
 
-  if (state.preset === "sunset") halftone(ctx, W, H);
-  vignette(ctx, W, H);
-  drawCaption(ctx, W, H);
+  if (studio.look === "sunset") paintHalftone(paint, W, H);
+  paintVignette(paint, W, H);
+  paintCaption(paint, W, H);
 
   if (!forExport) {
-    const shape = shapes[state.selected];
+    const shape = shapes[studio.active];
     if (shape) {
-      ctx.save();
-      tracePath(ctx, shape, W, H);
-      ctx.strokeStyle = "#2ee6c8";
-      ctx.lineWidth = Math.max(3, W * 0.0035);
-      ctx.shadowColor = "rgba(46,230,200,0.8)";
-      ctx.shadowBlur = 12;
-      ctx.stroke();
-      ctx.restore();
+      paint.save();
+      tracePoly(paint, shape, W, H);
+      paint.strokeStyle = "#2ee6c8";
+      paint.lineWidth = Math.max(3, W * 0.0035);
+      paint.shadowColor = "rgba(46,230,200,0.8)";
+      paint.shadowBlur = 12;
+      paint.stroke();
+      paint.restore();
     }
   }
-  syncPanelUi();
+  syncPanelControls();
 }
 
-// ---------- controls ----------
+// ------------------------------------------------------------------ controls
 
-const $ = (id) => document.getElementById(id);
-const zoomInput = $("zoom");
-const panelLabel = $("panel-label");
-
-function syncPanelUi() {
-  panelLabel.textContent = `Panel ${state.selected + 1} of ${state.panels.length}`;
-  const p = state.panels[state.selected];
-  if (p && document.activeElement !== zoomInput) zoomInput.value = String(p.zoom);
+function syncPanelControls() {
+  $("panel-label").textContent = `Panel ${studio.active + 1} of ${studio.panels.length}`;
+  const panel = studio.panels[studio.active];
+  if (panel && document.activeElement !== zoomSlider) {
+    zoomSlider.value = String(panel.zoom);
+  }
   document.querySelectorAll(".photo-strip button").forEach((btn, i) => {
-    btn.classList.toggle("assigned", p && p.photo === i);
+    btn.classList.toggle("is-in-panel", !!panel && panel.photo === i);
   });
 }
 
-function setPreset(name) {
-  state.preset = name;
+function setLook(name) {
+  studio.look = name;
   document.body.dataset.preset = name;
-  $("preset-sunset").classList.toggle("active", name === "sunset");
-  $("preset-neon").classList.toggle("active", name === "neon");
-  resetPanels();
-  render();
+  $("preset-sunset").classList.toggle("is-active", name === "sunset");
+  $("preset-neon").classList.toggle("is-active", name === "neon");
+  rebuildPanels();
+  paintCover();
 }
 
-$("preset-sunset").addEventListener("click", () => setPreset("sunset"));
-$("preset-neon").addEventListener("click", () => setPreset("neon"));
+$("preset-sunset").addEventListener("click", () => setLook("sunset"));
+$("preset-neon").addEventListener("click", () => setLook("neon"));
 
-function addPhoto(img, key) {
-  const found = state.photos.findIndex((p) => p.key === key);
-  if (found >= 0) return found;
-  state.photos.push({ img, key });
-  if (state.photos.length > 3) state.photos.splice(0, state.photos.length - 3);
-  buildStrip();
-  return state.photos.length - 1;
+function registerPhoto(img, tag) {
+  const existing = studio.photos.findIndex((p) => p.tag === tag);
+  if (existing >= 0) return existing;
+  studio.photos.push({ img, tag });
+  if (studio.photos.length > 3) studio.photos.splice(0, studio.photos.length - 3);
+  buildPhotoStrip();
+  return studio.photos.length - 1;
 }
 
-function buildStrip() {
+function buildPhotoStrip() {
   const strip = $("photo-strip");
   strip.innerHTML = "";
-  state.photos.forEach((photo, i) => {
+  studio.photos.forEach((photo, i) => {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.title = `Put photo ${i + 1} in the selected panel`;
@@ -297,26 +362,26 @@ function buildStrip() {
     thumb.alt = `Photo ${i + 1}`;
     btn.appendChild(thumb);
     btn.addEventListener("click", () => {
-      state.panels[state.selected].photo = i;
-      render();
+      studio.panels[studio.active].photo = i;
+      paintCover();
     });
     strip.appendChild(btn);
   });
 }
 
 function loadSample(name) {
-  const key = `sample:${name}`;
-  const existing = state.photos.findIndex((p) => p.key === key);
+  const tag = `sample:${name}`;
+  const existing = studio.photos.findIndex((p) => p.tag === tag);
   if (existing >= 0) {
-    state.panels[state.selected].photo = existing;
-    render();
+    studio.panels[studio.active].photo = existing;
+    paintCover();
     return;
   }
   const img = new Image();
   img.onload = () => {
-    const idx = addPhoto(img, key);
-    state.panels[state.selected].photo = idx;
-    render();
+    const idx = registerPhoto(img, tag);
+    studio.panels[studio.active].photo = idx;
+    paintCover();
   };
   img.src = `samples/${name}.jpg`;
 }
@@ -327,18 +392,18 @@ $("sample-pier").addEventListener("click", () => loadSample("pier"));
 $("file-input").addEventListener("change", (event) => {
   const files = [...event.target.files].slice(0, 3);
   if (!files.length) return;
-  state.photos = [];
-  state.panels.forEach((p) => { p.photo = 0; p.panX = 0; p.panY = 0; p.zoom = 1; });
+  studio.photos = [];
+  studio.panels.forEach((p) => { p.photo = 0; p.dx = 0; p.dy = 0; p.zoom = 1; });
   let loaded = 0;
   files.forEach((file, i) => {
     const img = new Image();
     img.onload = () => {
-      state.photos[i] = { img, key: `upload:${file.name}` };
+      studio.photos[i] = { img, tag: `upload:${file.name}` };
       loaded++;
       if (loaded === files.length) {
-        state.photos = state.photos.filter(Boolean);
-        buildStrip();
-        render();
+        studio.photos = studio.photos.filter(Boolean);
+        buildPhotoStrip();
+        paintCover();
       }
     };
     img.src = URL.createObjectURL(file);
@@ -346,126 +411,143 @@ $("file-input").addEventListener("change", (event) => {
   event.target.value = "";
 });
 
-zoomInput.addEventListener("input", () => {
-  state.panels[state.selected].zoom = Number(zoomInput.value);
-  render();
+zoomSlider.addEventListener("input", () => {
+  studio.panels[studio.active].zoom = Number(zoomSlider.value);
+  paintCover();
 });
 
-$("caption").addEventListener("input", (e) => { state.caption = e.target.value; render(); });
-$("subtitle").addEventListener("input", (e) => { state.subtitle = e.target.value; render(); });
-$("caption-size").addEventListener("input", (e) => { state.captionScale = Number(e.target.value); render(); });
+$("caption").addEventListener("input", (e) => { studio.headline = e.target.value; paintCover(); });
+$("subtitle").addEventListener("input", (e) => { studio.subline = e.target.value; paintCover(); });
+$("caption-size").addEventListener("input", (e) => { studio.headScale = Number(e.target.value); paintCover(); });
 
-// ---------- canvas interaction: select + drag to pan ----------
+// ------------------------------------------------------------------ pointer
 
-function canvasPoint(event) {
-  const rect = stage.getBoundingClientRect();
+function canvasFraction(event) {
+  const rect = canvas.getBoundingClientRect();
   return {
     x: (event.clientX - rect.left) / rect.width,
     y: (event.clientY - rect.top) / rect.height,
   };
 }
 
-function pointInPoly(x, y, poly) {
-  let inside = false;
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const [xi, yi] = poly[i], [xj, yj] = poly[j];
-    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
-  }
-  return inside;
-}
+let dragState = null;
 
-let drag = null;
-
-stage.addEventListener("pointerdown", (event) => {
-  const pt = canvasPoint(event);
-  const shapes = panelShapes();
+canvas.addEventListener("pointerdown", (event) => {
+  const pt = canvasFraction(event);
+  const shapes = layout();
   for (let i = shapes.length - 1; i >= 0; i--) {
-    if (pointInPoly(pt.x, pt.y, shapes[i].poly)) {
-      state.selected = i;
-      const p = state.panels[i];
-      drag = { x: event.clientX, y: event.clientY, panX: p.panX, panY: p.panY, box: panelBox(shapes[i]) };
-      try { stage.setPointerCapture(event.pointerId); } catch { /* synthetic events have no active pointer */ }
-      stage.classList.add("dragging");
-      render();
+    if (insidePoly(pt.x, pt.y, shapes[i])) {
+      studio.active = i;
+      const panel = studio.panels[i];
+      dragState = {
+        startX: event.clientX,
+        startY: event.clientY,
+        dx: panel.dx,
+        dy: panel.dy,
+        box: shapeBounds(shapes[i]),
+      };
+      try { canvas.setPointerCapture(event.pointerId); } catch { /* synthetic events */ }
+      canvas.classList.add("dragging");
+      paintCover();
       break;
     }
   }
 });
 
-stage.addEventListener("pointermove", (event) => {
-  if (!drag) return;
-  const rect = stage.getBoundingClientRect();
-  const p = state.panels[state.selected];
-  p.panX = drag.panX + (event.clientX - drag.x) / (rect.width * drag.box.w);
-  p.panY = drag.panY + (event.clientY - drag.y) / (rect.height * drag.box.h);
-  render();
+canvas.addEventListener("pointermove", (event) => {
+  if (!dragState) return;
+  const rect = canvas.getBoundingClientRect();
+  const panel = studio.panels[studio.active];
+  panel.dx = dragState.dx + (event.clientX - dragState.startX) / (rect.width * dragState.box.w);
+  panel.dy = dragState.dy + (event.clientY - dragState.startY) / (rect.height * dragState.box.h);
+  // Keep the photo covering its panel: never pan so far that a gap opens.
+  const photo = studio.photos[Math.min(panel.photo, Math.max(0, studio.photos.length - 1))];
+  if (photo) {
+    const [W, H] = EXPORT_SIZES[studio.size];
+    const bw = dragState.box.w * W;
+    const bh = dragState.box.h * H;
+    const scale = Math.max(bw / photo.img.naturalWidth, bh / photo.img.naturalHeight) * panel.zoom;
+    const slackX = Math.max(0, (photo.img.naturalWidth * scale - bw) / 2 / bw);
+    const slackY = Math.max(0, (photo.img.naturalHeight * scale - bh) / 2 / bh);
+    panel.dx = Math.min(slackX, Math.max(-slackX, panel.dx));
+    panel.dy = Math.min(slackY, Math.max(-slackY, panel.dy));
+  }
+  paintCover();
 });
 
-const endDrag = () => { drag = null; stage.classList.remove("dragging"); };
-stage.addEventListener("pointerup", endDrag);
-stage.addEventListener("pointercancel", endDrag);
+const finishDrag = () => { dragState = null; canvas.classList.remove("dragging"); };
+canvas.addEventListener("pointerup", finishDrag);
+canvas.addEventListener("pointercancel", finishDrag);
 
-// Scroll over the canvas zooms the selected panel; double-click cycles
-// which loaded photo fills it.
-stage.addEventListener("wheel", (event) => {
+// Wheel zooms the selected panel; double-click cycles its photo.
+canvas.addEventListener("wheel", (event) => {
   event.preventDefault();
-  const p = state.panels[state.selected];
+  const panel = studio.panels[studio.active];
   const step = event.deltaY < 0 ? 1.06 : 1 / 1.06;
-  p.zoom = Math.min(3, Math.max(1, p.zoom * step));
-  render();
+  panel.zoom = Math.min(3, Math.max(1, panel.zoom * step));
+  paintCover();
 }, { passive: false });
 
-stage.addEventListener("dblclick", (event) => {
-  if (state.photos.length < 2) return;
-  const pt = canvasPoint(event);
-  const shapes = panelShapes();
+canvas.addEventListener("dblclick", (event) => {
+  if (studio.photos.length < 2) return;
+  const pt = canvasFraction(event);
+  const shapes = layout();
   for (let i = shapes.length - 1; i >= 0; i--) {
-    if (pointInPoly(pt.x, pt.y, shapes[i].poly)) {
-      state.selected = i;
-      const p = state.panels[i];
-      p.photo = (p.photo + 1) % state.photos.length;
-      render();
+    if (insidePoly(pt.x, pt.y, shapes[i])) {
+      studio.active = i;
+      const panel = studio.panels[i];
+      panel.photo = (panel.photo + 1) % studio.photos.length;
+      paintCover();
       break;
     }
   }
 });
 
-// ---------- export ----------
+// ------------------------------------------------------------------ export
 
 document.querySelectorAll(".export-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
-    state.sizeKey = btn.dataset.size;
-    render(true);
-    stage.toBlob((blob) => {
+    studio.size = btn.dataset.size;
+    paintCover(true);
+    canvas.toBlob((blob) => {
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = `vice-city-nights-${state.sizeKey}.png`;
+      a.download = `vice-city-nights-${studio.size}.png`;
       a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-      render();
+      paintCover();
     }, "image/png");
   });
 });
 
-// ---------- deterministic staging + boot ----------
+// ------------------------------------------------------------------ staging
 
 function applyStaging() {
   const q = new URLSearchParams(location.search);
   if (q.get("shot") === "cover") document.body.classList.add("shot-cover");
-  if (q.get("caption")) { state.caption = q.get("caption"); $("caption").value = state.caption; }
-  if (q.get("subtitle")) { state.subtitle = q.get("subtitle"); $("subtitle").value = state.subtitle; }
+  if (q.get("caption")) {
+    studio.headline = q.get("caption");
+    $("caption").value = studio.headline;
+  }
+  if (q.get("subtitle")) {
+    studio.subline = q.get("subtitle");
+    $("subtitle").value = studio.subline;
+  }
   const size = q.get("size");
-  if (size && SIZES[size]) state.sizeKey = size;
-  const preset = q.get("preset");
-  if (preset === "neon" || preset === "sunset") setPreset(preset);
+  if (size && EXPORT_SIZES[size]) studio.size = size;
+  const look = q.get("preset");
+  if (look === "neon" || look === "sunset") setLook(look);
   const photo = q.get("photo");
-  if (photo === "boulevard" || photo === "pier") loadSample(photo);
+  if (SAMPLE_NAMES.includes(photo)) loadSample(photo);
 }
 
-resetPanels();
-document.body.dataset.preset = state.preset;
+rebuildPanels();
+document.body.dataset.preset = studio.look;
 applyStaging();
-render();
+paintCover();
 if (document.fonts && document.fonts.load) {
-  document.fonts.load('80px Anton').then(() => render()).catch(() => {});
+  document.fonts.load("80px Anton").then(() => paintCover()).catch(() => {});
 }
+
+// Small handle for automated checks: state + repaint, nothing else.
+window.__vcn = { studio, paintCover, EXPORT_SIZES };
