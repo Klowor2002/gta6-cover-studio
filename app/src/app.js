@@ -1,13 +1,12 @@
-// Vice City Nights — Leonida Cover Studio.
-//
-// Photos + a caption become a multi-panel GTA-poster-style cover, painted
-// on a 2D canvas and exported as an exact-size PNG. The app is fully
-// offline: no libraries, no network requests, no storage — every photo
-// lives in memory and never leaves the machine.
-//
-// Two looks ship in the one app: "Vice Sunset" (a warm 3-panel diagonal
-// collage) and "Neon Nights" (a teal/magenta 4-panel grid). One painter,
-// renderCover(), draws both; the editor chrome only drives its state.
+/* Leonida Cover Studio — canvas cover renderer + editor.
+   Original design: "horizon" layout for Vice Sunset (full-width hero on top,
+   two panels below, caption band along the bottom) and "tower" layout for
+   Neon Nights (tall left panel, three stacked right, glowing caption strip
+   on top). Pure canvas 2D, no libraries, no network at run time. */
+
+const $ = (id) => document.getElementById(id);
+const stage = $("stage");
+const sctx = stage.getContext("2d");
 
 const SIZES = {
   "1080x1080": [1080, 1080],
@@ -15,545 +14,499 @@ const SIZES = {
   "1920x1080": [1920, 1080],
 };
 
-const SAMPLES = ["boulevard", "pier"];
-
-const stage = document.getElementById("cover-canvas");
-const ctx = stage.getContext("2d");
-
-const cover = {
-  look: "sunset", // "sunset" | "neon"
-  sizeKey: "1920x1080",
-  images: [], // { el: HTMLImageElement, label: string }
-  cells: [], // { photo: number, ox: number, oy: number, zoom: number }
+const state = {
+  preset: "sunset",
+  photos: [],            // { img, name } — in memory only
+  panels: [],           // { photo, zoom, dx, dy } per layout slot
   selected: 0,
-  title: "VICE CITY NIGHTS",
-  tagline: "Welcome back to Leonida",
-  titleScale: 1,
+  caption: "LEONIDA HEAT",
+  subtitle: "Two outlaws. One last score.",
+  captionScale: 1,
+  previewSize: "1920x1080",
 };
 
-const byId = (id) => document.getElementById(id);
-const zoomInput = byId("panel-zoom");
-
-// ------------------------------------------------------------------ cells
-
-function blankCell(photo) {
-  return { photo, ox: 0, oy: 0, zoom: 1 };
-}
-
-function cellCount() {
-  return cover.look === "sunset" ? 3 : 4;
-}
-
-function syncCells() {
-  const n = cellCount();
-  const keep = cover.cells.slice(0, n);
-  while (keep.length < n) keep.push(blankCell(0));
-  cover.cells = keep;
-  cover.selected = Math.min(cover.selected, n - 1);
-}
-
-// Cell outlines as polygons in unit space (fractions of the canvas).
-// Sunset: a tall hero on the left and two stacked cells on the right,
-// with slanted inner edges and white gutters, like poster key art.
-function sunsetShapes() {
-  return [
-    [[0, 0], [0.58, 0], [0.51, 1], [0, 1]],
-    [[0.62, 0], [1, 0], [1, 0.47], [0.58, 0.47]],
-    [[0.55, 0.51], [1, 0.51], [1, 1], [0.47, 1]],
-  ];
-}
-
-// Neon: a plain 2x2 grid with a narrow gutter between the cells.
-function neonShapes() {
-  const gap = 0.02;
-  const side = 0.5 - gap / 2;
-  const quad = (x, y) => [[x, y], [x + side, y], [x + side, y + side], [x, y + side]];
-  return [
-    quad(0, 0),
-    quad(0.5 + gap / 2, 0),
-    quad(0, 0.5 + gap / 2),
-    quad(0.5 + gap / 2, 0.5 + gap / 2),
-  ];
-}
-
-function shapes() {
-  return cover.look === "sunset" ? sunsetShapes() : neonShapes();
-}
-
-function polyBox(poly) {
-  let loX = 1, loY = 1, hiX = 0, hiY = 0;
-  for (const [x, y] of poly) {
-    if (x < loX) loX = x;
-    if (x > hiX) hiX = x;
-    if (y < loY) loY = y;
-    if (y > hiY) hiY = y;
-  }
-  return { x: loX, y: loY, w: hiX - loX, h: hiY - loY };
-}
-
-function trace(c, poly, W, H) {
-  c.beginPath();
-  poly.forEach(([fx, fy], i) => {
-    const x = fx * W, y = fy * H;
-    if (i === 0) c.moveTo(x, y);
-    else c.lineTo(x, y);
-  });
-  c.closePath();
-}
-
-// Ray-casting point-in-polygon, for picking the cell under the pointer.
-function pointInPoly(px, py, poly) {
-  let inside = false;
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const [xi, yi] = poly[i];
-    const [xj, yj] = poly[j];
-    const crosses = (yi > py) !== (yj > py)
-      && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi;
-    if (crosses) inside = !inside;
-  }
-  return inside;
-}
-
-// ------------------------------------------------------------------ painting
-
-// Cover-fit a photo into a cell box, honoring the cell's pan and zoom.
-function drawPhoto(c, img, box, W, H, cell) {
-  const bw = box.w * W;
-  const bh = box.h * H;
-  const fit = Math.max(bw / img.naturalWidth, bh / img.naturalHeight);
-  const scale = fit * cell.zoom;
-  const dw = img.naturalWidth * scale;
-  const dh = img.naturalHeight * scale;
-  const dx = box.x * W + (bw - dw) / 2 + cell.ox * bw;
-  const dy = box.y * H + (bh - dh) / 2 + cell.oy * bh;
-  c.drawImage(img, dx, dy, dw, dh);
-}
-
-// A cell with no photo yet: a warm or cool gradient and a big numeral.
-function drawEmptyCell(c, box, W, H, index) {
-  const warmPairs = [
-    ["#ff9a3d", "#e83e8c"],
-    ["#e83e8c", "#7b2ff7"],
-    ["#ffb347", "#d6336c"],
-  ];
-  const coolPairs = [
-    ["#0b3d4a", "#12b5a5"],
-    ["#3d0b3a", "#c218a8"],
-    ["#0a2e4a", "#1e88c7"],
-    ["#2e0a3d", "#7b2ff7"],
-  ];
-  const [from, to] = (cover.look === "sunset" ? warmPairs : coolPairs)[index % 4];
-  const grad = c.createLinearGradient(box.x * W, box.y * H, (box.x + box.w) * W, (box.y + box.h) * H);
-  grad.addColorStop(0, from);
-  grad.addColorStop(1, to);
-  c.fillStyle = grad;
-  c.fillRect(box.x * W, box.y * H, box.w * W, box.h * H);
-  c.fillStyle = "rgba(255,255,255,0.22)";
-  c.font = `${Math.round(box.h * H * 0.5)}px Anton, sans-serif`;
-  c.textAlign = "center";
-  c.textBaseline = "middle";
-  c.fillText(String(index + 1), (box.x + box.w / 2) * W, (box.y + box.h / 2) * H);
-  // A small nudge under the numeral so an empty panel explains itself.
-  c.fillStyle = "rgba(255,255,255,0.75)";
-  c.font = `600 ${Math.max(14, Math.round(box.h * H * 0.045))}px "Segoe UI", system-ui, sans-serif`;
-  c.fillText("ADD A PHOTO", (box.x + box.w / 2) * W, (box.y + box.h / 2 + box.h * H * 0.32) * H);
-}
-
-// A warm (sunset) or cool (neon) wash over the photo inside a cell.
-function drawGrade(c, box, W, H) {
-  const x = box.x * W, y = box.y * H, w = box.w * W, h = box.h * H;
-  const wash = c.createLinearGradient(x, y, x + w * 0.4, y + h);
-  if (cover.look === "sunset") {
-    wash.addColorStop(0, "rgba(255,138,42,0.30)");
-    wash.addColorStop(0.45, "rgba(255,64,140,0.15)");
-    wash.addColorStop(1, "rgba(46,10,92,0.38)");
-  } else {
-    wash.addColorStop(0, "rgba(46,230,200,0.15)");
-    wash.addColorStop(0.55, "rgba(20,10,40,0.10)");
-    wash.addColorStop(1, "rgba(255,47,150,0.22)");
-  }
-  c.fillStyle = wash;
-  c.fillRect(x, y, w, h);
-}
-
-// Staggered halftone dots across the whole cover (sunset look only).
-function drawHalftone(c, W, H) {
-  const step = Math.max(14, W * 0.014);
-  c.fillStyle = "rgba(255,255,255,0.055)";
-  let row = 0;
-  for (let y = step / 2; y < H; y += step, row++) {
-    const shift = row % 2 ? step / 2 : 0;
-    for (let x = shift + step / 2; x < W; x += step) {
-      c.beginPath();
-      c.arc(x, y, step * 0.16, 0, Math.PI * 2);
-      c.fill();
-    }
-  }
-}
-
-function drawVignette(c, W, H) {
-  const radius = Math.hypot(W, H) / 2;
-  const shade = c.createRadialGradient(W / 2, H / 2, radius * 0.45, W / 2, H / 2, radius);
-  shade.addColorStop(0, "rgba(8,3,18,0)");
-  shade.addColorStop(1, cover.look === "sunset" ? "rgba(8,3,18,0.36)" : "rgba(4,2,12,0.52)");
-  c.fillStyle = shade;
-  c.fillRect(0, 0, W, H);
-}
-
-// Fit the headline to the available width, shrinking from `start` if needed.
-function fitTitle(c, text, start, maxWidth) {
-  let size = start;
-  c.font = `${size}px Anton, sans-serif`;
-  const measured = c.measureText(text).width;
-  if (measured > maxWidth) size = Math.max(12, Math.floor(size * (maxWidth / measured)));
-  c.font = `${size}px Anton, sans-serif`;
-  return size;
-}
-
-function drawCaption(c, W, H) {
-  const title = (cover.title || "").toUpperCase();
-  const tagline = cover.tagline || "";
-  const bandH = H * 0.205;
-  const bandTop = H - bandH;
-
-  if (cover.look === "sunset") {
-    c.fillStyle = "rgba(14,6,26,0.90)";
-    c.fillRect(0, bandTop, W, bandH);
-    const stripe = c.createLinearGradient(0, bandTop, W, bandTop);
-    stripe.addColorStop(0, "#ff8a2a");
-    stripe.addColorStop(0.5, "#ff4fa3");
-    stripe.addColorStop(1, "#7b2ff7");
-    c.fillStyle = stripe;
-    c.fillRect(0, bandTop, W, Math.max(3, H * 0.007));
-  }
-
-  c.textAlign = "center";
-  c.textBaseline = "alphabetic";
-  try { c.letterSpacing = `${Math.round(W * 0.004)}px`; } catch { /* older canvas */ }
-
-  const baseSize = H * 0.104 * cover.titleScale;
-  const centerY = bandTop + bandH * 0.6;
-
-  if (cover.look === "neon") {
-    fitTitle(c, title, baseSize, W * 0.92);
-    // Neon tube effect: cyan and magenta ghosts behind a bright core.
-    c.shadowColor = "rgba(46,230,200,0.9)";
-    c.shadowBlur = H * 0.028;
-    c.fillStyle = "#0b2b33";
-    c.fillText(title, W / 2 - W * 0.0022, centerY);
-    c.shadowColor = "rgba(255,47,150,0.95)";
-    c.fillStyle = "#330b26";
-    c.fillText(title, W / 2 + W * 0.0022, centerY);
-    c.shadowBlur = H * 0.012;
-    c.fillStyle = "#f2fffc";
-    c.fillText(title, W / 2, centerY);
-    c.shadowBlur = 0;
-    if (tagline) {
-      c.font = `600 ${Math.round(H * 0.030)}px "Segoe UI", system-ui, sans-serif`;
-      c.fillStyle = "#7dfbe9";
-      c.shadowColor = "rgba(46,230,200,0.8)";
-      c.shadowBlur = H * 0.012;
-      c.fillText(tagline, W / 2, centerY + H * 0.052);
-      c.shadowBlur = 0;
-    }
-  } else {
-    fitTitle(c, title, baseSize, W * 0.92);
-    c.shadowColor = "rgba(0,0,0,0.55)";
-    c.shadowBlur = H * 0.008;
-    c.shadowOffsetY = H * 0.004;
-    c.fillStyle = "#ffffff";
-    c.fillText(title, W / 2, centerY);
-    c.shadowColor = "transparent";
-    c.shadowBlur = 0;
-    c.shadowOffsetY = 0;
-    if (tagline) {
-      c.font = `600 ${Math.round(H * 0.030)}px "Segoe UI", system-ui, sans-serif`;
-      try { c.letterSpacing = `${Math.round(W * 0.006)}px`; } catch { /* ignore */ }
-      c.fillStyle = "#ffd9ec";
-      c.fillText(tagline, W / 2, centerY + H * 0.054);
-    }
-  }
-  try { c.letterSpacing = "0px"; } catch { /* ignore */ }
-}
-
-// The one painter: draws the whole cover at the current size. In editor
-// mode it also outlines the selected cell so the user can see it.
-function renderCover(forExport = false) {
-  const [W, H] = SIZES[cover.sizeKey];
-  if (stage.width !== W || stage.height !== H) {
-    stage.width = W;
-    stage.height = H;
-  }
-
-  ctx.fillStyle = cover.look === "sunset" ? "#f5efe6" : "#07040f";
-  ctx.fillRect(0, 0, W, H);
-
-  const polys = shapes();
-  polys.forEach((poly, i) => {
-    const cell = cover.cells[i];
-    const box = polyBox(poly);
-    ctx.save();
-    trace(ctx, poly, W, H);
-    ctx.clip();
-    const photo = cover.images[Math.min(cell.photo, Math.max(0, cover.images.length - 1))];
-    if (photo) drawPhoto(ctx, photo.el, box, W, H, cell);
-    else drawEmptyCell(ctx, box, W, H, i);
-    drawGrade(ctx, box, W, H);
-    ctx.restore();
-  });
-
-  if (cover.look === "sunset") drawHalftone(ctx, W, H);
-  drawVignette(ctx, W, H);
-  drawCaption(ctx, W, H);
-
-  if (!forExport) {
-    const shape = polys[cover.selected];
-    if (shape) {
-      ctx.save();
-      trace(ctx, shape, W, H);
-      ctx.strokeStyle = "#2ee6c8";
-      ctx.lineWidth = Math.max(3, W * 0.0035);
-      ctx.shadowColor = "rgba(46,230,200,0.8)";
-      ctx.shadowBlur = 12;
-      ctx.stroke();
-      ctx.restore();
-    }
-  }
-  refreshPanelUI();
-}
-
-// ------------------------------------------------------------------ controls
-
-function refreshPanelUI() {
-  byId("panel-readout").textContent = `Panel ${cover.selected + 1} of ${cover.cells.length}`;
-  const cell = cover.cells[cover.selected];
-  if (cell && document.activeElement !== zoomInput) {
-    zoomInput.value = String(cell.zoom);
-  }
-  document.querySelectorAll(".photo-rack button").forEach((btn, i) => {
-    btn.classList.toggle("in-use", !!cell && cell.photo === i);
-  });
-}
-
-function setLook(name) {
-  cover.look = name;
-  document.body.dataset.look = name;
-  byId("look-sunset").classList.toggle("is-on", name === "sunset");
-  byId("look-neon").classList.toggle("is-on", name === "neon");
-  syncCells();
-  renderCover();
-}
-
-byId("look-sunset").addEventListener("click", () => setLook("sunset"));
-byId("look-neon").addEventListener("click", () => setLook("neon"));
-
-function addPhoto(img, label) {
-  const found = cover.images.findIndex((p) => p.label === label);
-  if (found >= 0) return found;
-  cover.images.push({ el: img, label });
-  if (cover.images.length > 3) cover.images.splice(0, cover.images.length - 3);
-  buildRack();
-  return cover.images.length - 1;
-}
-
-function buildRack() {
-  const rack = byId("photo-rack");
-  rack.innerHTML = "";
-  cover.images.forEach((photo, i) => {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.title = `Put photo ${i + 1} in the selected panel`;
-    const thumb = document.createElement("img");
-    thumb.src = photo.el.src;
-    thumb.alt = `Photo ${i + 1}`;
-    btn.appendChild(thumb);
-    btn.addEventListener("click", () => {
-      cover.cells[cover.selected].photo = i;
-      renderCover();
-    });
-    rack.appendChild(btn);
-  });
-}
-
-function loadSample(name) {
-  const label = `sample:${name}`;
-  const found = cover.images.findIndex((p) => p.label === label);
-  if (found >= 0) {
-    cover.cells[cover.selected].photo = found;
-    renderCover();
-    return;
-  }
-  const img = new Image();
-  img.onload = () => {
-    const idx = addPhoto(img, label);
-    cover.cells[cover.selected].photo = idx;
-    renderCover();
-  };
-  img.src = `samples/${name}.jpg`;
-}
-
-byId("try-boulevard").addEventListener("click", () => loadSample("boulevard"));
-byId("try-pier").addEventListener("click", () => loadSample("pier"));
-
-byId("photo-files").addEventListener("change", (event) => {
-  const files = [...event.target.files].slice(0, 3);
-  if (!files.length) return;
-  cover.images = [];
-  cover.cells.forEach((cell) => { cell.photo = 0; cell.ox = 0; cell.oy = 0; cell.zoom = 1; });
-  let done = 0;
-  files.forEach((file, i) => {
-    const img = new Image();
-    img.onload = () => {
-      cover.images[i] = { el: img, label: `upload:${file.name}` };
-      done++;
-      if (done === files.length) {
-        cover.images = cover.images.filter(Boolean);
-        buildRack();
-        renderCover();
-      }
+/* ---------- layouts: rects in 0..1 cover space ---------- */
+function layoutFor(preset) {
+  if (preset === "neon") {
+    // Tower: caption strip on top, tall panel left, three stacked right.
+    return {
+      band: { x: 0, y: 0, w: 1, h: 0.13 },
+      panels: [
+        { x: 0.0, y: 0.15, w: 0.44, h: 0.85 },
+        { x: 0.46, y: 0.15, w: 0.54, h: 0.27 },
+        { x: 0.46, y: 0.44, w: 0.54, h: 0.27 },
+        { x: 0.46, y: 0.73, w: 0.54, h: 0.27 },
+      ],
     };
-    img.src = URL.createObjectURL(file);
-  });
-  event.target.value = "";
-});
-
-zoomInput.addEventListener("input", () => {
-  cover.cells[cover.selected].zoom = Number(zoomInput.value);
-  renderCover();
-});
-
-byId("headline").addEventListener("input", (e) => { cover.title = e.target.value; renderCover(); });
-byId("tagline").addEventListener("input", (e) => { cover.tagline = e.target.value; renderCover(); });
-byId("headline-scale").addEventListener("input", (e) => { cover.titleScale = Number(e.target.value); renderCover(); });
-
-// ------------------------------------------------------------------ pointer
-
-function pointerFraction(event) {
-  const rect = stage.getBoundingClientRect();
+  }
+  // Horizon: hero across the top, two panels below, band along the bottom.
   return {
-    x: (event.clientX - rect.left) / rect.width,
-    y: (event.clientY - rect.top) / rect.height,
+    band: { x: 0, y: 0.86, w: 1, h: 0.14 },
+    panels: [
+      { x: 0.0, y: 0.0, w: 1.0, h: 0.56 },
+      { x: 0.0, y: 0.58, w: 0.4, h: 0.26 },
+      { x: 0.42, y: 0.58, w: 0.58, h: 0.26 },
+    ],
   };
 }
 
-let drag = null;
+function resetPanels() {
+  const n = layoutFor(state.preset).panels.length;
+  // Default framing per slot: the hero shows the whole photo, the smaller
+  // panels each show a different slice of it, so one photo reads as a
+  // multi-panel poster instead of four copies of the same crop.
+  const framing = [
+    { zoom: 1.0, dx: 0, dy: 0 },
+    { zoom: 1.2, dx: 0, dy: -0.35 },
+    { zoom: 1.2, dx: 0, dy: 0.35 },
+    { zoom: 1.35, dx: -0.2, dy: 0 },
+  ];
+  state.panels = Array.from({ length: n }, (_, i) => ({
+    photo: state.photos.length ? i % state.photos.length : -1,
+    zoom: framing[i].zoom,
+    dx: framing[i].dx,
+    dy: framing[i].dy,
+  }));
+  state.selected = 0;
+}
 
-stage.addEventListener("pointerdown", (event) => {
-  const pt = pointerFraction(event);
-  const polys = shapes();
-  for (let i = polys.length - 1; i >= 0; i--) {
-    if (pointInPoly(pt.x, pt.y, polys[i])) {
-      cover.selected = i;
-      const cell = cover.cells[i];
-      drag = {
-        fromX: event.clientX,
-        fromY: event.clientY,
-        ox: cell.ox,
-        oy: cell.oy,
-        box: polyBox(polys[i]),
-      };
-      try { stage.setPointerCapture(event.pointerId); } catch { /* synthetic events */ }
-      stage.classList.add("panning");
-      renderCover();
-      break;
+/* ---------- photo helpers ---------- */
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("could not load image"));
+    img.src = src;
+  });
+}
+
+async function addPhoto(img, name) {
+  if (state.photos.length >= 3) state.photos.shift();
+  state.photos.push({ img, name });
+  // Fill empty panels with the new photo, keep existing assignments.
+  state.panels.forEach((p) => {
+    if (p.photo < 0) p.photo = state.photos.length - 1;
+  });
+  renderPreview();
+  refreshChips();
+  refreshPanelList();
+}
+
+async function loadSample(kind) {
+  const file = kind === "pier" ? "pier.jpg" : "boulevard.jpg";
+  const res = await fetch(`samples/${file}`);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = await loadImage(url);
+    await addPhoto(img, file);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+/* ---------- drawing ---------- */
+function drawPhotoInto(ctx, img, rect, panel) {
+  const px = rect.x, py = rect.y, pw = rect.w, ph = rect.h;
+  const base = Math.max(pw / img.naturalWidth, ph / img.naturalHeight);
+  const s = base * panel.zoom;
+  const dw = img.naturalWidth * s;
+  const dh = img.naturalHeight * s;
+  const cx = px + pw / 2 + panel.dx * pw * 0.4;
+  const cy = py + ph / 2 + panel.dy * ph * 0.4;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(px, py, pw, ph);
+  ctx.clip();
+  ctx.drawImage(img, cx - dw / 2, cy - dh / 2, dw, dh);
+  ctx.restore();
+}
+
+function gradeSunset(ctx, W, H) {
+  const g = ctx.createLinearGradient(0, 0, W, H);
+  g.addColorStop(0, "rgba(255, 122, 26, 0.28)");
+  g.addColorStop(0.55, "rgba(255, 77, 141, 0.22)");
+  g.addColorStop(1, "rgba(94, 42, 168, 0.30)");
+  ctx.save();
+  ctx.globalCompositeOperation = "overlay";
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+  const warm = ctx.createLinearGradient(0, 0, 0, H);
+  warm.addColorStop(0, "rgba(255, 190, 90, 0.10)");
+  warm.addColorStop(1, "rgba(255, 90, 60, 0.14)");
+  ctx.save();
+  ctx.globalCompositeOperation = "soft-light";
+  ctx.fillStyle = warm;
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+}
+
+function gradeNeon(ctx, W, H) {
+  const teal = ctx.createLinearGradient(0, 0, W, H);
+  teal.addColorStop(0, "rgba(34, 230, 210, 0.30)");
+  teal.addColorStop(1, "rgba(34, 230, 210, 0.05)");
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  ctx.fillStyle = teal;
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+  const mag = ctx.createLinearGradient(W, H, 0, 0);
+  mag.addColorStop(0, "rgba(255, 46, 166, 0.30)");
+  mag.addColorStop(1, "rgba(255, 46, 166, 0.04)");
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  ctx.fillStyle = mag;
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+  ctx.save();
+  ctx.globalCompositeOperation = "multiply";
+  ctx.fillStyle = "rgba(8, 8, 30, 0.18)";
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+}
+
+function halftone(ctx, W, H) {
+  ctx.save();
+  ctx.globalAlpha = 0.07;
+  ctx.fillStyle = "#000";
+  const step = Math.max(6, Math.round(W / 220));
+  for (let y = step / 2; y < H; y += step) {
+    for (let x = step / 2; x < W; x += step) {
+      ctx.beginPath();
+      ctx.arc(x, y, Math.max(1, step * 0.16), 0, Math.PI * 2);
+      ctx.fill();
     }
   }
-});
+  ctx.restore();
+}
 
-stage.addEventListener("pointermove", (event) => {
-  if (!drag) return;
+function vignette(ctx, W, H) {
+  const r = Math.hypot(W, H) / 2;
+  const g = ctx.createRadialGradient(W / 2, H / 2, r * 0.45, W / 2, H / 2, r);
+  g.addColorStop(0, "rgba(0,0,0,0)");
+  g.addColorStop(1, "rgba(0,0,0,0.38)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+}
+
+function drawBand(ctx, band, W, H) {
+  const bx = band.x * W, by = band.y * H, bw = band.w * W, bh = band.h * H;
+  if (state.preset === "neon") {
+    ctx.fillStyle = "#0a0a18";
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.fillStyle = "#ff2ea6";
+    ctx.fillRect(bx, by + bh - Math.max(2, H * 0.004), bw, Math.max(2, H * 0.004));
+  } else {
+    const g = ctx.createLinearGradient(bx, by, bx + bw, by);
+    g.addColorStop(0, "#2b1055");
+    g.addColorStop(0.5, "#ff4d6d");
+    g.addColorStop(1, "#ff7a1a");
+    ctx.fillStyle = g;
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    ctx.fillRect(bx, by, bw, Math.max(2, H * 0.003));
+  }
+  // Caption, centred in the band.
+  const capSize = bh * 0.52 * state.captionScale;
+  ctx.save();
+  ctx.font = `${capSize}px Anton, sans-serif`;
+  try { ctx.letterSpacing = `${Math.round(capSize * 0.04)}px`; } catch {}
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  const cy = by + bh * 0.42;
+  if (state.preset === "neon") {
+    ctx.shadowColor = "#ff2ea6";
+    ctx.shadowBlur = capSize * 0.35;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(state.caption.toUpperCase(), bx + bw / 2, cy);
+    ctx.shadowColor = "#22e6d2";
+    ctx.shadowBlur = capSize * 0.18;
+    ctx.fillText(state.caption.toUpperCase(), bx + bw / 2, cy);
+    ctx.shadowBlur = 0;
+  } else {
+    ctx.shadowColor = "rgba(0,0,0,0.45)";
+    ctx.shadowBlur = capSize * 0.12;
+    ctx.shadowOffsetY = capSize * 0.05;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(state.caption.toUpperCase(), bx + bw / 2, cy);
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+  }
+  // Subtitle, smaller, under the caption.
+  const subSize = Math.max(10, bh * 0.17);
+  ctx.font = `600 ${subSize}px system-ui, sans-serif`;
+  try { ctx.letterSpacing = `${Math.round(subSize * 0.12)}px`; } catch {}
+  ctx.fillStyle = state.preset === "neon" ? "#9ff5ea" : "rgba(255,255,255,0.92)";
+  ctx.fillText(state.subtitle, bx + bw / 2, by + bh * 0.82);
+  ctx.restore();
+}
+
+function renderCover(ctx, W, H) {
+  const layout = layoutFor(state.preset);
+  const gutter = Math.max(3, Math.round(Math.min(W, H) * 0.006));
+  // Backdrop: warm paper for sunset, deep navy for neon.
+  ctx.fillStyle = state.preset === "neon" ? "#0a0a18" : "#fff6ec";
+  ctx.fillRect(0, 0, W, H);
+  for (let i = 0; i < layout.panels.length; i++) {
+    const p = layout.panels[i];
+    const rect = {
+      x: p.x * W + gutter,
+      y: p.y * H + gutter,
+      w: p.w * W - gutter * 2,
+      h: p.h * H - gutter * 2,
+    };
+    const slot = state.panels[i];
+    const photo = slot && slot.photo >= 0 ? state.photos[slot.photo] : null;
+    if (photo) {
+      drawPhotoInto(ctx, photo.img, rect, slot);
+    } else {
+      ctx.fillStyle = state.preset === "neon" ? "#171738" : "#e8d9c8";
+      ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+      ctx.fillStyle = state.preset === "neon" ? "#3d3d7a" : "#9a8a76";
+      ctx.font = `600 ${Math.max(12, rect.h * 0.09)}px system-ui, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("Add a photo", rect.x + rect.w / 2, rect.y + rect.h / 2);
+    }
+    if (state.preset === "neon") {
+      ctx.strokeStyle = "rgba(255,46,166,0.55)";
+      ctx.lineWidth = Math.max(1, H * 0.002);
+      ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
+    }
+  }
+  if (state.preset === "sunset") gradeSunset(ctx, W, H);
+  else gradeNeon(ctx, W, H);
+  halftone(ctx, W, H);
+  vignette(ctx, W, H);
+  drawBand(ctx, layout.band, W, H);
+}
+
+/* ---------- preview ---------- */
+function renderPreview() {
+  const [W, H] = SIZES[state.previewSize];
+  stage.width = W;
+  stage.height = H;
+  renderCover(sctx, W, H);
+}
+
+function previewRects() {
+  const layout = layoutFor(state.preset);
   const rect = stage.getBoundingClientRect();
-  const cell = cover.cells[cover.selected];
-  cell.ox = drag.ox + (event.clientX - drag.fromX) / (rect.width * drag.box.w);
-  cell.oy = drag.oy + (event.clientY - drag.fromY) / (rect.height * drag.box.h);
-  // Keep the photo covering its cell: never pan so far that a gap opens.
-  const photo = cover.images[Math.min(cell.photo, Math.max(0, cover.images.length - 1))];
-  if (photo) {
-    const [W, H] = SIZES[cover.sizeKey];
-    const bw = drag.box.w * W;
-    const bh = drag.box.h * H;
-    const fit = Math.max(bw / photo.el.naturalWidth, bh / photo.el.naturalHeight) * cell.zoom;
-    const slackX = Math.max(0, (photo.el.naturalWidth * fit - bw) / 2 / bw);
-    const slackY = Math.max(0, (photo.el.naturalHeight * fit - bh) / 2 / bh);
-    cell.ox = Math.min(slackX, Math.max(-slackX, cell.ox));
-    cell.oy = Math.min(slackY, Math.max(-slackY, cell.oy));
-  }
-  renderCover();
-});
+  const scaleX = rect.width / stage.width;
+  const scaleY = rect.height / stage.height;
+  return layout.panels.map((p) => ({
+    x: p.x * rect.width,
+    y: p.y * rect.height,
+    w: p.w * rect.width,
+    h: p.h * rect.height,
+    scaleX, scaleY,
+  }));
+}
 
-const endDrag = () => { drag = null; stage.classList.remove("panning"); };
-stage.addEventListener("pointerup", endDrag);
-stage.addEventListener("pointercancel", endDrag);
-
-// Wheel zooms the selected cell; double-click cycles its photo.
-stage.addEventListener("wheel", (event) => {
-  event.preventDefault();
-  const cell = cover.cells[cover.selected];
-  const step = event.deltaY < 0 ? 1.06 : 1 / 1.06;
-  cell.zoom = Math.min(3, Math.max(1, cell.zoom * step));
-  renderCover();
-}, { passive: false });
-
-stage.addEventListener("dblclick", (event) => {
-  if (cover.images.length < 2) return;
-  const pt = pointerFraction(event);
-  const polys = shapes();
-  for (let i = polys.length - 1; i >= 0; i--) {
-    if (pointInPoly(pt.x, pt.y, polys[i])) {
-      cover.selected = i;
-      const cell = cover.cells[i];
-      cell.photo = (cell.photo + 1) % cover.images.length;
-      renderCover();
-      break;
-    }
-  }
-});
-
-// ------------------------------------------------------------------ export
-
-document.querySelectorAll(".export").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    cover.sizeKey = btn.dataset.export;
-    renderCover(true);
-    stage.toBlob((blob) => {
+/* ---------- export ---------- */
+function exportPNG(sizeKey) {
+  const [W, H] = SIZES[sizeKey];
+  const off = document.createElement("canvas");
+  off.width = W;
+  off.height = H;
+  renderCover(off.getContext("2d"), W, H);
+  return new Promise((resolve) => {
+    off.toBlob((blob) => {
+      const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = `vice-city-nights-${cover.sizeKey}.png`;
+      a.href = url;
+      a.download = `leonida-cover-${sizeKey}.png`;
       a.click();
-      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-      renderCover();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      resolve({ width: W, height: H, bytes: blob.size });
     }, "image/png");
   });
+}
+
+/* ---------- editor UI ---------- */
+function refreshChips() {
+  const box = $("photoChips");
+  box.innerHTML = "";
+  state.photos.forEach((p, i) => {
+    const chip = document.createElement("button");
+    chip.className = "chip";
+    chip.type = "button";
+    chip.textContent = `${i + 1} · ${p.name}`;
+    chip.title = "Assign this photo to the selected panel";
+    chip.addEventListener("click", () => {
+      state.panels[state.selected].photo = i;
+      renderPreview();
+      refreshPanelList();
+    });
+    box.appendChild(chip);
+  });
+}
+
+function refreshPanelList() {
+  const box = $("panelList");
+  box.innerHTML = "";
+  layoutFor(state.preset).panels.forEach((_, i) => {
+    const slot = state.panels[i];
+    const name = slot && slot.photo >= 0 ? state.photos[slot.photo].name : "Empty";
+    const btn = document.createElement("button");
+    btn.className = "panel-item" + (i === state.selected ? " is-selected" : "");
+    btn.type = "button";
+    const label = document.createElement("span");
+    label.textContent = `Panel ${i + 1}`;
+    const small = document.createElement("small");
+    small.textContent = name;
+    btn.append(label, small);
+    btn.addEventListener("click", () => {
+      state.selected = i;
+      syncSliders();
+      renderPreview();
+      refreshPanelList();
+    });
+    box.appendChild(btn);
+  });
+}
+
+function syncSliders() {
+  const slot = state.panels[state.selected];
+  if (!slot) return;
+  $("zoomRange").value = slot.zoom;
+  $("zoomValue").textContent = `${slot.zoom.toFixed(2)}×`;
+  $("panXRange").value = Math.round(slot.dx * 100);
+  $("panXValue").textContent = Math.round(slot.dx * 100);
+  $("panYRange").value = Math.round(slot.dy * 100);
+  $("panYValue").textContent = Math.round(slot.dy * 100);
+}
+
+function setPreset(preset) {
+  state.preset = preset;
+  document.body.dataset.preset = preset;
+  $("presetSunset").classList.toggle("is-active", preset === "sunset");
+  $("presetNeon").classList.toggle("is-active", preset === "neon");
+  $("presetSunset").setAttribute("aria-pressed", String(preset === "sunset"));
+  $("presetNeon").setAttribute("aria-pressed", String(preset === "neon"));
+  resetPanels();
+  renderPreview();
+  refreshPanelList();
+}
+
+/* ---------- pointer: select + drag to pan ---------- */
+let drag = null;
+stage.addEventListener("pointerdown", (e) => {
+  const rects = previewRects();
+  const r = stage.getBoundingClientRect();
+  const x = e.clientX - r.left, y = e.clientY - r.top;
+  const hit = rects.findIndex((p) => x >= p.x && x <= p.x + p.w && y >= p.y && y <= p.y + p.h);
+  if (hit < 0) return;
+  state.selected = hit;
+  syncSliders();
+  refreshPanelList();
+  const slot = state.panels[hit];
+  drag = { x, y, dx: slot.dx, dy: slot.dy, rect: rects[hit] };
+  stage.setPointerCapture(e.pointerId);
+});
+stage.addEventListener("pointermove", (e) => {
+  if (!drag) return;
+  const r = stage.getBoundingClientRect();
+  const x = e.clientX - r.left, y = e.clientY - r.top;
+  const slot = state.panels[state.selected];
+  slot.dx = Math.max(-1, Math.min(1, drag.dx + (x - drag.x) / drag.rect.w / 0.4));
+  slot.dy = Math.max(-1, Math.min(1, drag.dy + (y - drag.y) / drag.rect.h / 0.4));
+  renderPreview();
+  syncSliders();
+});
+stage.addEventListener("pointerup", () => { drag = null; });
+
+/* ---------- wire up controls ---------- */
+$("photoInput").addEventListener("change", async (e) => {
+  for (const file of e.target.files) {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = await loadImage(url);
+      await addPhoto(img, file.name);
+    } catch { /* skip unreadable files */ }
+    finally { URL.revokeObjectURL(url); }
+  }
+  e.target.value = "";
+});
+$("sampleBoulevard").addEventListener("click", () => loadSample("boulevard"));
+$("samplePier").addEventListener("click", () => loadSample("pier"));
+$("presetSunset").addEventListener("click", () => setPreset("sunset"));
+$("presetNeon").addEventListener("click", () => setPreset("neon"));
+$("captionInput").addEventListener("input", (e) => { state.caption = e.target.value; renderPreview(); });
+$("subtitleInput").addEventListener("input", (e) => { state.subtitle = e.target.value; renderPreview(); });
+$("sizeRange").addEventListener("input", (e) => {
+  state.captionScale = Number(e.target.value) / 100;
+  $("sizeValue").textContent = `${e.target.value}%`;
+  renderPreview();
+});
+$("zoomRange").addEventListener("input", (e) => {
+  state.panels[state.selected].zoom = Number(e.target.value);
+  renderPreview();
+  syncSliders();
+});
+$("panXRange").addEventListener("input", (e) => {
+  state.panels[state.selected].dx = Number(e.target.value) / 100;
+  renderPreview();
+  syncSliders();
+});
+$("panYRange").addEventListener("input", (e) => {
+  state.panels[state.selected].dy = Number(e.target.value) / 100;
+  renderPreview();
+  syncSliders();
+});
+document.querySelectorAll(".export-btn").forEach((btn) => {
+  btn.addEventListener("click", async () => {
+    const size = btn.dataset.size;
+    state.previewSize = size;
+    renderPreview();
+    await exportPNG(size);
+  });
 });
 
-// ------------------------------------------------------------------ staging
-
-function applyStaging() {
+/* ---------- deterministic staging via URL params ---------- */
+async function applyShotParams() {
   const q = new URLSearchParams(location.search);
-  if (q.get("shot") === "cover") document.body.classList.add("shot-cover");
-  if (q.get("caption")) {
-    cover.title = q.get("caption");
-    byId("headline").value = cover.title;
-  }
-  if (q.get("subtitle")) {
-    cover.tagline = q.get("subtitle");
-    byId("tagline").value = cover.tagline;
-  }
+  const preset = q.get("preset");
+  if (preset === "sunset" || preset === "neon") setPreset(preset);
+  const caption = q.get("caption");
+  if (caption !== null) { state.caption = caption; $("captionInput").value = caption; }
+  const subtitle = q.get("subtitle");
+  if (subtitle !== null) { state.subtitle = subtitle; $("subtitleInput").value = subtitle; }
   const size = q.get("size");
-  if (size && SIZES[size]) cover.sizeKey = size;
-  const look = q.get("preset");
-  if (look === "neon" || look === "sunset") setLook(look);
+  if (size && SIZES[size]) state.previewSize = size;
   const photo = q.get("photo");
-  if (SAMPLES.includes(photo)) loadSample(photo);
+  if (photo === "boulevard" || photo === "pier") await loadSample(photo);
+  if (q.get("shot") === "cover") {
+    document.body.classList.add("cover-mode");
+    stage.width = window.innerWidth;
+    stage.height = window.innerHeight;
+    renderCover(sctx, stage.width, stage.height);
+    return;
+  }
+  renderPreview();
 }
 
-syncCells();
-document.body.dataset.look = cover.look;
-applyStaging();
-renderCover();
-if (document.fonts && document.fonts.load) {
-  document.fonts.load("80px Anton").then(() => renderCover()).catch(() => {});
-}
+/* ---------- test hook for the CDP driver (not part of the UI) ---------- */
+window.__leonida = {
+  state,
+  exportPNG,
+  renderCover,
+  loadSample,
+  setPreset,
+};
 
-// Small handle for automated checks: state + repaint, nothing else.
-window.__vcn = { cover, renderCover, SIZES };
+/* Keep a full-viewport cover filling the window if it is resized. */
+window.addEventListener("resize", () => {
+  if (!document.body.classList.contains("cover-mode")) return;
+  stage.width = window.innerWidth;
+  stage.height = window.innerHeight;
+  renderCover(sctx, stage.width, stage.height);
+});
+
+/* ---------- init ---------- */
+resetPanels();
+refreshPanelList();
+syncSliders();
+try { await document.fonts.load('40px Anton'); await document.fonts.ready; } catch {}
+await applyShotParams();
