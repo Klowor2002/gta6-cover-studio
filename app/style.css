@@ -1,6 +1,7 @@
-/* Leonida Cover Studio — editor chrome.
-   Cover art itself is drawn on canvas (see src/app.js); this sheet styles
-   only the editing page. Two preset themes live on body[data-preset]. */
+/* Leonida Cover Studio — the editor page.
+   The cover art itself is painted on canvas (see src/app.js); this sheet
+   only dresses the editing page. The two presets restyle the page through
+   body[data-preset]. */
 
 @font-face {
   font-family: "Anton";
@@ -43,7 +44,7 @@ body {
   transition: background 0.25s ease;
 }
 
-/* ---------- top bar ---------- */
+/* ---------- header ---------- */
 .topbar {
   display: flex;
   align-items: center;
@@ -106,7 +107,7 @@ input:focus-visible,
   outline-offset: 2px;
 }
 
-/* ---------- workbench ---------- */
+/* ---------- workbench: controls rail + preview ---------- */
 .workbench {
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr);
@@ -168,7 +169,12 @@ input:focus-visible,
   padding: 4px 10px;
   font-size: 12px;
   background: rgba(255, 255, 255, 0.04);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
 }
+
+.chip:hover { border-color: var(--accent); }
 
 .panel-list { display: flex; flex-direction: column; gap: 6px; }
 
@@ -229,7 +235,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .export-btn span { display: block; font-size: 11px; font-weight: 400; color: var(--ink-dim); margin-top: 2px; }
 .export-btn:hover { border-color: var(--accent); }
 
-/* ---------- stage ---------- */
+/* ---------- preview stage ---------- */
 .stage-wrap {
   position: sticky;
   top: 14px;
@@ -256,7 +262,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   font-size: 12px;
 }
 
-/* Cover-only staging: hide every bit of editor chrome. */
+/* Full-viewport cover staging: hide all editor chrome. */
 body.cover-mode .topbar,
 body.cover-mode .rail,
 body.cover-mode .foot,

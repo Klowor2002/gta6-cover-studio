@@ -3,16 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Leonida Cover Studio — GTA-style cover maker</title>
+<title>Leonida Cover Studio — make your own GTA-style cover</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body data-preset="sunset">
 <header class="topbar">
   <div class="brand">
-    <span class="brand-mark">LC</span>
+    <span class="brand-mark" aria-hidden="true">LC</span>
     <div>
       <h1>Leonida Cover Studio</h1>
-      <p class="tagline">Turn your photos into Vice City poster art</p>
+      <p class="tagline">Your photos, dressed up as Vice City poster art</p>
     </div>
   </div>
   <div class="preset-switch" role="group" aria-label="Style preset">
@@ -31,13 +31,13 @@
         <button id="sampleBoulevard" class="sample-btn" type="button">Try boulevard</button>
         <button id="samplePier" class="sample-btn" type="button">Try pier</button>
       </div>
-      <p class="hint">Photos stay on your machine — nothing is uploaded.</p>
+      <p class="hint">Your photos never leave this machine — nothing is uploaded.</p>
       <div id="photoChips" class="chips"></div>
     </section>
 
     <section class="rail-block">
       <h2>2 · Panels</h2>
-      <p class="hint">Click a panel in the preview to select it, drag to pan, use the zoom slider.</p>
+      <p class="hint">Click a panel in the preview to pick it, then drag inside it to pan, or use the zoom slider.</p>
       <div id="panelList" class="panel-list"></div>
       <label class="slider-label" for="zoomRange">Zoom <span id="zoomValue">1.00×</span></label>
       <input id="zoomRange" type="range" min="0.5" max="3" step="0.01" value="1">
@@ -64,21 +64,21 @@
         <button class="export-btn" data-size="1080x1350" type="button">Portrait<br><span>1080 × 1350</span></button>
         <button class="export-btn" data-size="1920x1080" type="button">Wide<br><span>1920 × 1080</span></button>
       </div>
-      <p class="hint">One click — a PNG downloads at the exact size.</p>
+      <p class="hint">One click and the PNG downloads at the exact size — no other steps.</p>
     </section>
   </aside>
 
   <section class="stage-wrap" aria-label="Cover preview">
     <canvas id="stage" width="960" height="540"></canvas>
-    <p class="stage-note">Live preview — what you see is what the PNG looks like.</p>
+    <p class="stage-note">Live preview — the PNG looks exactly like this.</p>
   </section>
 </main>
 
 <footer class="foot">
-  <p>Original art made with your photos. No Rockstar logos, artwork or fonts. Anton typeface under the SIL Open Font License.</p>
+  <p>Original art made from your photos. No Rockstar logos, artwork or fonts. Anton typeface under the SIL Open Font License — see app/fonts/OFL.txt.</p>
 </footer>
 
-<noscript><p style="padding:16px">Leonida Cover Studio needs JavaScript — it draws your cover on a canvas.</p></noscript>
+<noscript><p style="padding:16px">Leonida Cover Studio needs JavaScript — the cover is drawn on a canvas.</p></noscript>
 <script type="module" src="src/app.js"></script>
 </body>
 </html>
